@@ -14,6 +14,7 @@ function iniciarServidor() {
   servidor = spawn('node', ['server.js'], {
     cwd: __dirname,
     stdio: 'inherit',
+    env: { ...process.env, DB_MODE: 'prod' },
   });
 
   servidor.on('exit', code => {

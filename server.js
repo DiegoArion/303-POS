@@ -1,35 +1,57 @@
-const express  = require('express');
-const cors     = require('cors');
-const path     = require('path');
-const crypto   = require('crypto');
-const { MongoClient } = require('mongodb');
+const express            = require('express');
+const cors               = require('cors');
+const path               = require('path');
+const crypto             = require('crypto');
+const { MongoClient, ObjectId } = require('mongodb');
 
-function hashPwd(pw) {
-  return crypto.createHash('sha256').update(pw + 'pos-salt-2024').digest('hex');
+// ── Config ───────────────────────────────────────────────────────
+const IS_PROD   = process.env.DB_MODE === 'prod';
+const MONGO_URI = IS_PROD
+  ? 'mongodb+srv://Pos_db_user:DiIXdP9KWJzBARDS@lena.grmlcs0.mongodb.net/?appName=Lena'
+  : 'mongodb://localhost:27017';
+const DB_NAME   = IS_PROD ? 'pos_prod' : 'pos';
+const PORT      = 3000;
+
+// ── Helpers ──────────────────────────────────────────────────────
+const hashPwd = pw => crypto.createHash('sha256').update(pw + 'pos-salt-2024').digest('hex');
+const round2  = n  => parseFloat(Number(n).toFixed(2));
+const localDate = () => new Date().toLocaleDateString('en-CA');
+
+// Envuelve handlers async — centraliza el try/catch
+const wrap = fn => (req, res) => fn(req, res).catch(err => res.status(500).json({ error: err.message }));
+
+// Construye el documento de producto normalizado
+function buildProductDoc({ codigo, producto, pCosto, pVenta, stock, categoria, proveedor, unidad }) {
+  const parseNum = (v, fn) => v !== undefined && v !== '' && v != null ? fn(Number(v)) : null;
+  return {
+    codigo:       (codigo    ?? '').trim(),
+    producto:     producto.trim(),
+    pCosto:       parseNum(pCosto,  n => round2(n)),
+    pVenta:       parseNum(pVenta,  n => round2(n)),
+    stock:        parseNum(stock,   n => parseInt(n)) ?? 0,
+    categoria:    (categoria ?? '').trim(),
+    proveedor:    (proveedor ?? '').trim(),
+    unidad:       (unidad    ?? '').trim(),
+    actualizadoEn: new Date(),
+  };
 }
 
+// Calcula ganancia de una venta
+const calcGanancia = venta =>
+  venta.productos.reduce((s, p) =>
+    p.pCosto != null ? s + (p.pVenta - p.pCosto) * p.cantidad : s, 0);
+
+// ── Auth ─────────────────────────────────────────────────────────
 const sessions = new Map(); // token → { username, tipo, _id }
 
-const MONGO_URI  = 'mongodb://localhost:27017';
-const DB_NAME    = 'pos';
-const PORT       = 3000;
-
-const app    = express();
+// ── Conexión ─────────────────────────────────────────────────────
+let db;
 const client = new MongoClient(MONGO_URI);
 
-app.use(cors());
-app.use(express.json());
-
-// ── Conexión compartida ──────────────────────────────────────────
-let db;
 async function conectar() {
   await client.connect();
   db = client.db(DB_NAME);
-  console.log(`✅ MongoDB conectado — base: ${DB_NAME}`);
-  await seedUsuarios();
-}
-
-async function seedUsuarios() {
+  console.log(`✅ MongoDB conectado — base: ${DB_NAME} (${IS_PROD ? 'PRODUCCIÓN · Atlas' : 'desarrollo · local'})`);
   const existe = await db.collection('usuarios').countDocuments();
   if (existe === 0) {
     await db.collection('usuarios').insertMany([
@@ -40,481 +62,327 @@ async function seedUsuarios() {
   }
 }
 
-// ── GET /api/productos ───────────────────────────────────────────
-// Parámetros opcionales: ?q=texto  &cat=Categoria
-app.get('/api/productos', async (req, res) => {
-  try {
-    const { q, cat } = req.query;
-    const filtro = {};
+// ── App ───────────────────────────────────────────────────────────
+const app = express();
+app.use(cors());
+app.use(express.json());
 
-    if (cat && cat !== 'Todos') {
-      filtro.categoria = { $regex: new RegExp(`^${cat}$`, 'i') };
+// ── Productos ────────────────────────────────────────────────────
+app.get('/api/productos', wrap(async (req, res) => {
+  const { q, cat } = req.query;
+  const filtro = {};
+  if (cat && cat !== 'Todos') filtro.categoria = { $regex: new RegExp(`^${cat}$`, 'i') };
+  if (q) filtro.$or = [
+    { producto:  { $regex: q, $options: 'i' } },
+    { codigo:    { $regex: q, $options: 'i' } },
+    { categoria: { $regex: q, $options: 'i' } },
+  ];
+  res.json(await db.collection('productos').find(filtro).sort({ producto: 1 }).toArray());
+}));
+
+app.post('/api/productos', wrap(async (req, res) => {
+  if (!req.body.producto?.trim()) return res.status(400).json({ error: 'El nombre del producto es requerido' });
+  const doc = buildProductDoc(req.body);
+  const result = await db.collection('productos').insertOne(doc);
+  res.status(201).json({ ...doc, _id: result.insertedId });
+}));
+
+app.put('/api/productos/:id', wrap(async (req, res) => {
+  if (!req.body.producto?.trim()) return res.status(400).json({ error: 'El nombre del producto es requerido' });
+  const update = buildProductDoc(req.body);
+  const result = await db.collection('productos').updateOne(
+    { _id: new ObjectId(req.params.id) }, { $set: update }
+  );
+  if (result.matchedCount === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+  res.json({ _id: req.params.id, ...update });
+}));
+
+app.post('/api/productos/bulk', wrap(async (req, res) => {
+  const { productos } = req.body;
+  if (!Array.isArray(productos) || !productos.length) return res.status(400).json({ error: 'Sin productos' });
+
+  const resultados = { insertados: 0, errores: [] };
+  for (const [i, p] of productos.entries()) {
+    if (!p.producto?.trim()) { resultados.errores.push({ fila: i + 1, error: 'Nombre requerido' }); continue; }
+    try {
+      await db.collection('productos').insertOne(buildProductDoc(p));
+      resultados.insertados++;
+    } catch (e) {
+      resultados.errores.push({ fila: i + 1, error: e.message });
     }
-    if (q) {
-      filtro.$or = [
-        { producto:  { $regex: q, $options: 'i' } },
-        { codigo:    { $regex: q, $options: 'i' } },
-        { categoria: { $regex: q, $options: 'i' } },
-      ];
-    }
-
-    const docs = await db.collection('productos')
-      .find(filtro)
-      .sort({ producto: 1 })
-      .toArray();
-
-    res.json(docs);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
   }
-});
+  res.status(201).json(resultados);
+}));
 
-// ── GET /api/dashboard ──────────────────────────────────────────
-app.get('/api/dashboard', async (_req, res) => {
-  try {
-    const ahora      = new Date();
-    const inicioDia  = new Date(ahora); inicioDia.setHours(0,0,0,0);
-    const finDia     = new Date(ahora); finDia.setHours(23,59,59,999);
-    const inicioMes  = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
-    const finMes     = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0, 23, 59, 59, 999);
+// ── Categorías ───────────────────────────────────────────────────
+app.get('/api/categorias', wrap(async (_req, res) => {
+  const cats = await db.collection('productos').distinct('categoria');
+  res.json(cats.filter(Boolean).sort());
+}));
 
-    const [ventasHoy, ventasMes] = await Promise.all([
-      db.collection('ventas').find({ fecha: { $gte: inicioDia, $lte: finDia } }).toArray(),
-      db.collection('ventas').find({ fecha: { $gte: inicioMes, $lte: finMes } }).toArray(),
-    ]);
+// ── Config ───────────────────────────────────────────────────────
+app.get('/api/config', wrap(async (_req, res) => {
+  const docs = await db.collection('config').find({}).toArray();
+  const cfg  = { categorias: [], proveedores: [], unidades: [] };
+  for (const d of docs) if (d.tipo in cfg) cfg[d.tipo] = d.valores ?? [];
+  res.json(cfg);
+}));
 
-    // ── Hoy ──
-    const totalHoy = ventasHoy.reduce((s, v) => s + v.total, 0);
-    const porHora  = Array(24).fill(0);
-    const porHoraGanancia = Array(24).fill(0);
-    let gananciaHoy = 0;
+app.put('/api/config/:tipo', wrap(async (req, res) => {
+  const { tipo } = req.params;
+  if (!['categorias', 'proveedores', 'unidades'].includes(tipo))
+    return res.status(400).json({ error: 'Tipo inválido' });
+  const valores = (req.body.valores ?? []).map(v => String(v).trim()).filter(Boolean);
+  await db.collection('config').updateOne({ tipo }, { $set: { tipo, valores } }, { upsert: true });
+  res.json({ tipo, valores });
+}));
 
-    for (const v of ventasHoy) {
-      const h = new Date(v.fecha).getHours();
-      porHora[h] += v.total;
-      for (const p of v.productos) {
-        if (p.pCosto != null) {
-          const g = (p.pVenta - p.pCosto) * p.cantidad;
-          gananciaHoy   += g;
-          porHoraGanancia[h] += g;
-        }
-      }
-    }
+// ── Ventas ───────────────────────────────────────────────────────
+app.post('/api/ventas', wrap(async (req, res) => {
+  const { productos, metodoPago, nota } = req.body;
+  if (!productos?.length) return res.status(400).json({ error: 'Sin productos' });
+  if (!['efectivo', 'tarjeta'].includes(metodoPago)) return res.status(400).json({ error: 'Método de pago inválido' });
 
-    // ── Mes ──
-    const diasEnMes = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0).getDate();
-    const porDia    = Array.from({ length: diasEnMes }, (_, i) => ({
-      dia: i + 1, total: 0, ganancia: 0,
-    }));
+  const ultima   = await db.collection('ventas').findOne({}, { sort: { folio_num: -1 } });
+  const folioNum = (ultima?.folio_num ?? 0) + 1;
+  const total    = round2(productos.reduce((s, p) => s + p.pVenta * p.cantidad, 0));
 
-    for (const v of ventasMes) {
-      const idx = new Date(v.fecha).getDate() - 1;
-      porDia[idx].total += v.total;
-      for (const p of v.productos) {
-        if (p.pCosto != null)
-          porDia[idx].ganancia += (p.pVenta - p.pCosto) * p.cantidad;
-      }
-    }
+  const venta = {
+    folio:        'VTA-' + String(folioNum).padStart(5, '0'),
+    folio_num:    folioNum,
+    fecha:        new Date(),
+    productos:    productos.map(p => ({
+      codigo:   p.codigo   || '',
+      nombre:   p.nombre,
+      pVenta:   p.pVenta,
+      pCosto:   p.pCosto ?? null,
+      cantidad: p.cantidad,
+      unidad:   p.unidad  || '',
+      ...(p.esGranel ? { esGranel: true } : {}),
+      subtotal: round2(p.pVenta * p.cantidad),
+    })),
+    numProductos: productos.reduce((s, p) => s + p.cantidad, 0),
+    subtotal:     total,
+    iva:          0,
+    total,
+    metodoPago,
+    ...(nota?.trim() ? { nota: nota.trim() } : {}),
+  };
 
-    // Redondear
-    porDia.forEach(d => {
-      d.total    = parseFloat(d.total.toFixed(2));
-      d.ganancia = parseFloat(d.ganancia.toFixed(2));
-    });
-    porHoraGanancia.forEach((v, i) => { porHoraGanancia[i] = parseFloat(v.toFixed(2)); });
+  const result = await db.collection('ventas').insertOne(venta);
+  res.status(201).json({ ...venta, _id: result.insertedId });
+}));
 
-    res.json({
-      hoy: {
-        total:          parseFloat(totalHoy.toFixed(2)),
-        ganancia:       parseFloat(gananciaHoy.toFixed(2)),
-        transacciones:  ventasHoy.length,
-        porHora:        porHora.map(v => parseFloat(v.toFixed(2))),
-        porHoraGanancia,
-      },
-      mes: porDia,
-    });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+app.patch('/api/ventas/:id/nota', wrap(async (req, res) => {
+  const nota   = (req.body.nota ?? '').trim();
+  const result = await db.collection('ventas').updateOne(
+    { _id: new ObjectId(req.params.id) },
+    nota ? { $set: { nota } } : { $unset: { nota: '' } }
+  );
+  if (result.matchedCount === 0) return res.status(404).json({ error: 'Venta no encontrada' });
+  res.json({ ok: true, nota });
+}));
+
+app.get('/api/ventas', wrap(async (req, res) => {
+  const limit  = Math.min(parseInt(req.query.limit ?? 50), 200);
+  const skip   = parseInt(req.query.skip ?? 0);
+  const filtro = req.query.metodo ? { metodoPago: req.query.metodo } : {};
+  const [docs, total] = await Promise.all([
+    db.collection('ventas').find(filtro).sort({ fecha: -1 }).skip(skip).limit(limit).toArray(),
+    db.collection('ventas').countDocuments(filtro),
+  ]);
+  res.json({ ventas: docs, total });
+}));
+
+// ── Pedidos ──────────────────────────────────────────────────────
+app.post('/api/pedidos', wrap(async (req, res) => {
+  const { proveedor, fecha, hora, nota, productos } = req.body;
+  if (!Array.isArray(productos) || !productos.length) return res.status(400).json({ error: 'Sin productos' });
+
+  const ultimo   = await db.collection('pedidos').findOne({}, { sort: { folio_num: -1 } });
+  const folioNum = (ultimo?.folio_num ?? 0) + 1;
+
+  const items = productos.map(p => ({
+    productoId: p.productoId || '',
+    nombre:     p.nombre.trim(),
+    cantidad:   parseFloat(p.cantidad),
+    unidad:     (p.unidad || '').trim(),
+    costo:      round2(p.costo),
+    subtotal:   round2(p.cantidad * p.costo),
+  }));
+
+  const pedido = {
+    folio:     'PED-' + String(folioNum).padStart(5, '0'),
+    folio_num: folioNum,
+    fecha:     new Date(`${fecha}T${hora || '00:00'}:00`),
+    proveedor: (proveedor || '').trim(),
+    productos: items,
+    total:     round2(items.reduce((s, i) => s + i.subtotal, 0)),
+    ...(nota ? { nota: nota.trim() } : {}),
+    creadoEn:  new Date(),
+  };
+
+  const result = await db.collection('pedidos').insertOne(pedido);
+
+  for (const item of items) {
+    if (!item.productoId) continue;
+    try {
+      await db.collection('productos').updateOne(
+        { _id: new ObjectId(item.productoId) }, { $inc: { stock: item.cantidad } }
+      );
+    } catch { /* id inválido, ignorar */ }
   }
-});
 
-// ── GET /api/categorias ─────────────────────────────────────────
-app.get('/api/categorias', async (req, res) => {
-  try {
-    const cats = await db.collection('productos').distinct('categoria');
-    res.json(cats.filter(Boolean).sort());
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  res.status(201).json({ ...pedido, _id: result.insertedId });
+}));
 
-// ── GET /api/config ──────────────────────────────────────────────
-app.get('/api/config', async (_req, res) => {
-  try {
-    const docs = await db.collection('config').find({}).toArray();
-    const cfg  = { categorias: [], proveedores: [], unidades: [] };
-    for (const d of docs) if (d.tipo in cfg) cfg[d.tipo] = d.valores ?? [];
-    res.json(cfg);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+app.get('/api/pedidos', wrap(async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit ?? 100), 500);
+  const skip  = parseInt(req.query.skip ?? 0);
+  const docs  = await db.collection('pedidos').find({}).sort({ fecha: -1 }).skip(skip).limit(limit).toArray();
+  res.json({ pedidos: docs });
+}));
 
-// ── PUT /api/config/:tipo ────────────────────────────────────────
-app.put('/api/config/:tipo', async (req, res) => {
-  try {
-    const { tipo } = req.params;
-    if (!['categorias', 'proveedores', 'unidades'].includes(tipo))
-      return res.status(400).json({ error: 'Tipo inválido' });
+// ── Auth ─────────────────────────────────────────────────────────
+app.post('/api/auth/login', wrap(async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Datos incompletos' });
+  const user = await db.collection('usuarios').findOne({ username: username.trim() });
+  if (!user || user.password !== hashPwd(password))
+    return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+  const token = crypto.randomBytes(32).toString('hex');
+  sessions.set(token, { username: user.username, tipo: user.tipo, _id: String(user._id) });
+  res.json({ token, username: user.username, tipo: user.tipo });
+}));
 
-    const valores = (req.body.valores ?? [])
-      .map(v => String(v).trim())
-      .filter(Boolean);
-
-    await db.collection('config').updateOne(
-      { tipo },
-      { $set: { tipo, valores } },
-      { upsert: true }
-    );
-    res.json({ tipo, valores });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── POST /api/productos ──────────────────────────────────────────
-app.post('/api/productos', async (req, res) => {
-  try {
-    const { codigo, producto, pCosto, pVenta, stock, categoria, proveedor, unidad } = req.body;
-    if (!producto?.trim()) return res.status(400).json({ error: 'El nombre del producto es requerido' });
-
-    const doc = {
-      codigo:    (codigo    ?? '').trim(),
-      producto:  producto.trim(),
-      pCosto:    pCosto  !== undefined && pCosto  !== '' ? parseFloat(Number(pCosto).toFixed(2))  : null,
-      pVenta:    pVenta  !== undefined && pVenta  !== '' ? parseFloat(Number(pVenta).toFixed(2))  : null,
-      stock:     stock   !== undefined && stock   !== '' ? parseInt(stock)  : 0,
-      categoria: (categoria ?? '').trim(),
-      proveedor: (proveedor ?? '').trim(),
-      unidad:    (unidad    ?? '').trim(),
-      actualizadoEn: new Date(),
-    };
-
-    const result = await db.collection('productos').insertOne(doc);
-    res.status(201).json({ ...doc, _id: result.insertedId });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── PUT /api/productos/:id ───────────────────────────────────────
-app.put('/api/productos/:id', async (req, res) => {
-  try {
-    const { ObjectId } = require('mongodb');
-    const { codigo, producto, pCosto, pVenta, stock, categoria, proveedor, unidad } = req.body;
-    if (!producto?.trim()) return res.status(400).json({ error: 'El nombre del producto es requerido' });
-
-    const update = {
-      codigo:    (codigo    ?? '').trim(),
-      producto:  producto.trim(),
-      pCosto:    pCosto  !== undefined && pCosto  !== '' ? parseFloat(Number(pCosto).toFixed(2))  : null,
-      pVenta:    pVenta  !== undefined && pVenta  !== '' ? parseFloat(Number(pVenta).toFixed(2))  : null,
-      stock:     stock   !== undefined && stock   !== '' ? parseInt(stock)  : 0,
-      categoria: (categoria ?? '').trim(),
-      proveedor: (proveedor ?? '').trim(),
-      unidad:    (unidad    ?? '').trim(),
-      actualizadoEn: new Date(),
-    };
-
-    const result = await db.collection('productos').updateOne(
-      { _id: new ObjectId(req.params.id) },
-      { $set: update }
-    );
-
-    if (result.matchedCount === 0) return res.status(404).json({ error: 'Producto no encontrado' });
-    res.json({ _id: req.params.id, ...update });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── POST /api/productos/bulk ─────────────────────────────────────
-app.post('/api/productos/bulk', async (req, res) => {
-  try {
-    const { productos } = req.body;
-    if (!Array.isArray(productos) || !productos.length)
-      return res.status(400).json({ error: 'Sin productos' });
-
-    const resultados = { insertados: 0, errores: [] };
-
-    for (const [i, p] of productos.entries()) {
-      if (!p.producto?.trim()) {
-        resultados.errores.push({ fila: i + 1, error: 'Nombre requerido' });
-        continue;
-      }
-      try {
-        await db.collection('productos').insertOne({
-          codigo:    (p.codigo    ?? '').trim(),
-          producto:  p.producto.trim(),
-          pCosto:    p.pCosto !== '' && p.pCosto != null ? parseFloat(Number(p.pCosto).toFixed(2)) : null,
-          pVenta:    p.pVenta !== '' && p.pVenta != null ? parseFloat(Number(p.pVenta).toFixed(2)) : null,
-          stock:     p.stock  !== '' && p.stock  != null ? parseInt(p.stock) : 0,
-          categoria: (p.categoria ?? '').trim(),
-          proveedor: (p.proveedor ?? '').trim(),
-          unidad:    (p.unidad    ?? '').trim(),
-          actualizadoEn: new Date(),
-        });
-        resultados.insertados++;
-      } catch (e) {
-        resultados.errores.push({ fila: i + 1, error: e.message });
-      }
-    }
-
-    res.status(201).json(resultados);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── POST /api/ventas ─────────────────────────────────────────────
-app.post('/api/ventas', async (req, res) => {
-  try {
-    const { productos, metodoPago, nota } = req.body;
-
-    if (!productos?.length) return res.status(400).json({ error: 'Sin productos' });
-    if (!['efectivo', 'tarjeta'].includes(metodoPago))
-      return res.status(400).json({ error: 'Método de pago inválido' });
-
-    // Folio único correlativo
-    const ultima = await db.collection('ventas').findOne({}, { sort: { folio_num: -1 } });
-    const folioNum = (ultima?.folio_num ?? 0) + 1;
-    const folio    = 'VTA-' + String(folioNum).padStart(5, '0');
-
-    const subtotal = parseFloat(productos.reduce((s, p) => s + p.pVenta * p.cantidad, 0).toFixed(2));
-    const iva      = 0;
-    const total    = subtotal;
-
-    const venta = {
-      folio,
-      folio_num:   folioNum,
-      fecha:       new Date(),
-      productos:   productos.map(p => ({
-        codigo:    p.codigo   || '',
-        nombre:    p.nombre,
-        pVenta:    p.pVenta,
-        pCosto:    p.pCosto   ?? null,
-        cantidad:  p.cantidad,
-        unidad:    p.unidad   || '',
-        ...(p.esGranel ? { esGranel: true } : {}),
-        subtotal:  parseFloat((p.pVenta * p.cantidad).toFixed(2)),
-      })),
-      numProductos: productos.reduce((s, p) => s + p.cantidad, 0),
-      subtotal:     parseFloat(subtotal.toFixed(2)),
-      iva,
-      total,
-      metodoPago,
-      ...(nota?.trim() ? { nota: nota.trim() } : {}),
-    };
-
-    const result = await db.collection('ventas').insertOne(venta);
-    res.status(201).json({ ...venta, _id: result.insertedId });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── PATCH /api/ventas/:id/nota ───────────────────────────────────
-app.patch('/api/ventas/:id/nota', async (req, res) => {
-  try {
-    const { ObjectId } = require('mongodb');
-    const nota = (req.body.nota ?? '').trim();
-    const result = await db.collection('ventas').updateOne(
-      { _id: new ObjectId(req.params.id) },
-      nota ? { $set: { nota } } : { $unset: { nota: '' } }
-    );
-    if (result.matchedCount === 0) return res.status(404).json({ error: 'Venta no encontrada' });
-    res.json({ ok: true, nota });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── GET /api/ventas ──────────────────────────────────────────────
-// ?limit=50  &skip=0  &metodo=efectivo|tarjeta
-app.get('/api/ventas', async (req, res) => {
-  try {
-    const limit  = Math.min(parseInt(req.query.limit  ?? 50), 200);
-    const skip   = parseInt(req.query.skip ?? 0);
-    const filtro = {};
-    if (req.query.metodo) filtro.metodoPago = req.query.metodo;
-
-    const [docs, total] = await Promise.all([
-      db.collection('ventas').find(filtro).sort({ fecha: -1 }).skip(skip).limit(limit).toArray(),
-      db.collection('ventas').countDocuments(filtro),
-    ]);
-
-    res.json({ ventas: docs, total });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── POST /api/pedidos ────────────────────────────────────────────
-app.post('/api/pedidos', async (req, res) => {
-  try {
-    const { ObjectId } = require('mongodb');
-    const { proveedor, fecha, hora, nota, productos } = req.body;
-
-    if (!Array.isArray(productos) || !productos.length)
-      return res.status(400).json({ error: 'Sin productos' });
-
-    // Folio correlativo
-    const ultimo   = await db.collection('pedidos').findOne({}, { sort: { folio_num: -1 } });
-    const folioNum = (ultimo?.folio_num ?? 0) + 1;
-    const folio    = 'PED-' + String(folioNum).padStart(5, '0');
-
-    const items = productos.map(p => ({
-      productoId: p.productoId || '',
-      nombre:     p.nombre.trim(),
-      cantidad:   parseFloat(p.cantidad),
-      unidad:     (p.unidad || '').trim(),
-      costo:      parseFloat(Number(p.costo).toFixed(2)),
-      subtotal:   parseFloat((p.cantidad * p.costo).toFixed(2)),
-    }));
-
-    const total = parseFloat(items.reduce((s, i) => s + i.subtotal, 0).toFixed(2));
-
-    const pedido = {
-      folio,
-      folio_num: folioNum,
-      fecha:     new Date(`${fecha}T${hora || '00:00'}:00`),
-      proveedor: (proveedor || '').trim(),
-      productos: items,
-      total,
-      ...(nota ? { nota: nota.trim() } : {}),
-      creadoEn: new Date(),
-    };
-
-    // Guardar pedido
-    const result = await db.collection('pedidos').insertOne(pedido);
-
-    // Actualizar stock de cada producto con id registrado
-    for (const item of items) {
-      if (!item.productoId) continue;
-      try {
-        await db.collection('productos').updateOne(
-          { _id: new ObjectId(item.productoId) },
-          { $inc: { stock: item.cantidad } }
-        );
-      } catch { /* id inválido, ignorar */ }
-    }
-
-    res.status(201).json({ ...pedido, _id: result.insertedId });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── GET /api/pedidos ─────────────────────────────────────────────
-app.get('/api/pedidos', async (req, res) => {
-  try {
-    const limit = Math.min(parseInt(req.query.limit ?? 100), 500);
-    const skip  = parseInt(req.query.skip ?? 0);
-    const docs  = await db.collection('pedidos').find({}).sort({ fecha: -1 }).skip(skip).limit(limit).toArray();
-    res.json({ pedidos: docs });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── POST /api/auth/login ─────────────────────────────────────────
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'Datos incompletos' });
-    const user = await db.collection('usuarios').findOne({ username: username.trim() });
-    if (!user || user.password !== hashPwd(password))
-      return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
-    const token = crypto.randomBytes(32).toString('hex');
-    sessions.set(token, { username: user.username, tipo: user.tipo, _id: String(user._id) });
-    res.json({ token, username: user.username, tipo: user.tipo });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-// ── POST /api/auth/logout ────────────────────────────────────────
 app.post('/api/auth/logout', (req, res) => {
-  const token = req.headers['x-token'];
-  if (token) sessions.delete(token);
+  sessions.delete(req.headers['x-token']);
   res.json({ ok: true });
 });
 
-// ── GET /api/auth/me ─────────────────────────────────────────────
 app.get('/api/auth/me', (req, res) => {
   const token = req.headers['x-token'];
   if (!token || !sessions.has(token)) return res.status(401).json({ error: 'No autorizado' });
   res.json(sessions.get(token));
 });
 
-// ── GET /api/usuarios ────────────────────────────────────────────
-app.get('/api/usuarios', async (_req, res) => {
-  try {
-    const docs = await db.collection('usuarios')
-      .find({}, { projection: { password: 0 } })
-      .sort({ creadoEn: 1 }).toArray();
-    res.json(docs);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
+// ── Usuarios ─────────────────────────────────────────────────────
+app.get('/api/usuarios', wrap(async (_req, res) => {
+  const docs = await db.collection('usuarios')
+    .find({}, { projection: { password: 0 } }).sort({ creadoEn: 1 }).toArray();
+  res.json(docs);
+}));
 
-// ── POST /api/usuarios ───────────────────────────────────────────
-app.post('/api/usuarios', async (req, res) => {
-  try {
-    const { username, password, tipo } = req.body;
-    if (!username?.trim() || !password) return res.status(400).json({ error: 'Datos incompletos' });
-    if (!['admin', 'vendedor'].includes(tipo)) return res.status(400).json({ error: 'Tipo inválido' });
-    const existe = await db.collection('usuarios').findOne({ username: username.trim() });
-    if (existe) return res.status(400).json({ error: 'El nombre de usuario ya existe' });
-    const doc = { username: username.trim(), password: hashPwd(password), tipo, creadoEn: new Date() };
-    const result = await db.collection('usuarios').insertOne(doc);
-    res.status(201).json({ _id: result.insertedId, username: doc.username, tipo });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
+app.post('/api/usuarios', wrap(async (req, res) => {
+  const { username, password, tipo } = req.body;
+  if (!username?.trim() || !password) return res.status(400).json({ error: 'Datos incompletos' });
+  if (!['admin', 'vendedor'].includes(tipo)) return res.status(400).json({ error: 'Tipo inválido' });
+  if (await db.collection('usuarios').findOne({ username: username.trim() }))
+    return res.status(400).json({ error: 'El nombre de usuario ya existe' });
+  const doc = { username: username.trim(), password: hashPwd(password), tipo, creadoEn: new Date() };
+  const result = await db.collection('usuarios').insertOne(doc);
+  res.status(201).json({ _id: result.insertedId, username: doc.username, tipo });
+}));
 
-// ── PATCH /api/usuarios/:id ──────────────────────────────────────
-app.patch('/api/usuarios/:id', async (req, res) => {
-  try {
-    const { ObjectId } = require('mongodb');
-    const { tipo, password } = req.body;
-    const set = {};
-    if (tipo && ['admin', 'vendedor'].includes(tipo)) set.tipo = tipo;
-    if (password?.trim()) set.password = hashPwd(password);
-    if (!Object.keys(set).length) return res.status(400).json({ error: 'Sin cambios' });
-    await db.collection('usuarios').updateOne({ _id: new ObjectId(req.params.id) }, { $set: set });
-    res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
+app.patch('/api/usuarios/:id', wrap(async (req, res) => {
+  const { tipo, password } = req.body;
+  const set = {};
+  if (tipo && ['admin', 'vendedor'].includes(tipo)) set.tipo = tipo;
+  if (password?.trim()) set.password = hashPwd(password);
+  if (!Object.keys(set).length) return res.status(400).json({ error: 'Sin cambios' });
+  await db.collection('usuarios').updateOne({ _id: new ObjectId(req.params.id) }, { $set: set });
+  res.json({ ok: true });
+}));
 
-// ── DELETE /api/usuarios/:id ─────────────────────────────────────
-app.delete('/api/usuarios/:id', async (req, res) => {
-  try {
-    const { ObjectId } = require('mongodb');
-    const user = await db.collection('usuarios').findOne({ _id: new ObjectId(req.params.id) });
-    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-    if (user.tipo === 'admin') {
-      const admins = await db.collection('usuarios').countDocuments({ tipo: 'admin' });
-      if (admins <= 1) return res.status(400).json({ error: 'No puedes eliminar el único administrador' });
-    }
-    await db.collection('usuarios').deleteOne({ _id: new ObjectId(req.params.id) });
-    res.json({ ok: true });
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
+app.delete('/api/usuarios/:id', wrap(async (req, res) => {
+  const user = await db.collection('usuarios').findOne({ _id: new ObjectId(req.params.id) });
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+  if (user.tipo === 'admin') {
+    const admins = await db.collection('usuarios').countDocuments({ tipo: 'admin' });
+    if (admins <= 1) return res.status(400).json({ error: 'No puedes eliminar el único administrador' });
+  }
+  await db.collection('usuarios').deleteOne({ _id: new ObjectId(req.params.id) });
+  res.json({ ok: true });
+}));
 
-// ── Archivos estáticos (después de las rutas API) ────────────────
-app.use(express.static(path.join(__dirname)));
+// ── Caja ─────────────────────────────────────────────────────────
+app.post('/api/caja', wrap(async (req, res) => {
+  const { tipo, monto, concepto } = req.body;
+  if (!['deposito', 'retiro'].includes(tipo)) return res.status(400).json({ error: 'Tipo inválido' });
+  if (!monto || monto <= 0) return res.status(400).json({ error: 'Monto inválido' });
+  const ahora = new Date();
+  const doc   = { tipo, monto: Number(monto), concepto: concepto?.trim() || '', fecha: localDate(), creadoEn: ahora };
+  const result = await db.collection('caja').insertOne(doc);
+  res.json({ _id: String(result.insertedId), ...doc });
+}));
 
-// ── Arranque ─────────────────────────────────────────────────────
+app.get('/api/caja', wrap(async (req, res) => {
+  const fecha = req.query.fecha || localDate();
+  const movs  = await db.collection('caja').find({ fecha }).sort({ creadoEn: 1 }).toArray();
+  res.json(movs);
+}));
+
+// ── Dashboard ────────────────────────────────────────────────────
+app.get('/api/dashboard', wrap(async (_req, res) => {
+  const ahora     = new Date();
+  const inicioDia = new Date(ahora); inicioDia.setHours(0,0,0,0);
+  const finDia    = new Date(ahora); finDia.setHours(23,59,59,999);
+  const inicioMes = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+  const finMes    = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  const [ventasHoy, ventasMes] = await Promise.all([
+    db.collection('ventas').find({ fecha: { $gte: inicioDia, $lte: finDia   } }).toArray(),
+    db.collection('ventas').find({ fecha: { $gte: inicioMes, $lte: finMes   } }).toArray(),
+  ]);
+
+  const porHora          = Array(24).fill(0);
+  const porHoraGanancia  = Array(24).fill(0);
+  let   gananciaHoy      = 0;
+
+  for (const v of ventasHoy) {
+    const h = new Date(v.fecha).getHours();
+    porHora[h] += v.total;
+    const g     = calcGanancia(v);
+    gananciaHoy        += g;
+    porHoraGanancia[h] += g;
+  }
+
+  const diasEnMes = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0).getDate();
+  const porDia    = Array.from({ length: diasEnMes }, (_, i) => ({ dia: i + 1, total: 0, ganancia: 0 }));
+
+  for (const v of ventasMes) {
+    const idx = new Date(v.fecha).getDate() - 1;
+    porDia[idx].total    += v.total;
+    porDia[idx].ganancia += calcGanancia(v);
+  }
+
+  porDia.forEach(d => { d.total = round2(d.total); d.ganancia = round2(d.ganancia); });
+
+  res.json({
+    hoy: {
+      total:          round2(ventasHoy.reduce((s, v) => s + v.total, 0)),
+      ganancia:       round2(gananciaHoy),
+      transacciones:  ventasHoy.length,
+      porHora:        porHora.map(round2),
+      porHoraGanancia: porHoraGanancia.map(round2),
+    },
+    mes: porDia,
+  });
+}));
+
+// ── Estáticos y arranque ─────────────────────────────────────────
+app.use(express.static(path.join(__dirname), {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.css')) res.set('Content-Type', 'text/css; charset=utf-8');
+    if (filePath.endsWith('.js'))  res.set('Content-Type', 'application/javascript; charset=utf-8');
+    if (filePath.endsWith('.html')) res.set('Content-Type', 'text/html; charset=utf-8');
+  }
+}));
+
 conectar().then(() => {
   app.listen(PORT, () => {
     console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
+    console.log(`🗄️  Base de datos: ${IS_PROD ? '🔴 PRODUCCIÓN (Atlas · pos_prod)' : '🟡 TEST (local · pos)'}`);
   });
 }).catch(err => {
   console.error('❌ No se pudo conectar a MongoDB:', err.message);

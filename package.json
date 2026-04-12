@@ -4,11 +4,13 @@
   "description": "Importador de productos desde Excel a MongoDB",
   "main": "server.js",
   "scripts": {
-    "start":  "node server.js",
+    "start": "node server.js",
+    "start:prod": "cross-env DB_MODE=prod node server.js",
     "import": "node extras/import-productos.js"
   },
   "dependencies": {
     "cors": "^2.8.6",
+    "cross-env": "^7.0.3",
     "express": "^5.2.1",
     "mongodb": "^6.9.0",
     "xlsx": "^0.18.5"
