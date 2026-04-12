@@ -52,59 +52,35 @@
 
   <nav class="sidebar-nav">
     <div class="nav-label" data-roles="admin">Principal</div>
-    <div class="nav-item" data-page="dashboard" data-roles="admin">
-      <i class="fas fa-chart-line"></i> Dashboard
-    </div>
+    <div class="nav-item" data-page="dashboard" data-roles="admin"><i class="fas fa-chart-line"></i> Dashboard</div>
 
     <div class="nav-label" data-roles="admin vendedor">Ventas</div>
-    <div class="nav-item active" data-page="sales" data-roles="admin vendedor">
-      <i class="fas fa-cash-register"></i> Punto de Venta
-    </div>
-    <div class="nav-item" data-page="caja-mov" data-roles="admin vendedor">
-      <i class="fas fa-vault"></i> Mov. de Caja
-    </div>
+    <div class="nav-item active" data-page="sales" data-roles="admin vendedor"><i class="fas fa-cash-register"></i> Punto de Venta</div>
+    <div class="nav-item" data-page="caja-mov" data-roles="admin vendedor"><i class="fas fa-vault"></i> Mov. de Caja</div>
 
     <div class="nav-label" data-roles="admin vendedor">Catálogo</div>
-    <div class="nav-item" data-page="products" data-roles="admin vendedor">
-      <i class="fas fa-box-open"></i> Productos
-    </div>
-    <div class="nav-item" data-page="inventory" data-roles="admin vendedor">
-      <i class="fas fa-warehouse"></i> Inventario
-    </div>
-    <div class="nav-item" data-page="agregar" data-roles="admin">
-      <i class="fas fa-circle-plus"></i> Agregar productos
-    </div>
+    <div class="nav-item" data-page="products" data-roles="admin vendedor"><i class="fas fa-box-open"></i> Productos</div>
+    <div class="nav-item" data-page="inventory" data-roles="admin vendedor"><i class="fas fa-warehouse"></i> Inventario</div>
+    <div class="nav-item" data-page="agregar" data-roles="admin"><i class="fas fa-circle-plus"></i> Agregar productos</div>
 
     <div class="nav-label" data-roles="admin vendedor">Compras</div>
-    <div class="nav-item" data-page="nuevo-pedido" data-roles="admin vendedor">
-      <i class="fas fa-cart-arrow-down"></i> Nuevo Pedido
-    </div>
+    <div class="nav-item" data-page="nuevo-pedido" data-roles="admin vendedor"><i class="fas fa-cart-arrow-down"></i> Nuevo Pedido</div>
 
     <div class="nav-label" data-roles="admin">Reportes</div>
-    <div class="nav-item" data-page="ventas" data-roles="admin">
-      <i class="fas fa-receipt"></i> Ventas
-    </div>
-    <div class="nav-item" data-page="caja-reporte" data-roles="admin">
-      <i class="fas fa-money-bill-wave"></i> Caja
-    </div>
-    <div class="nav-item" data-page="pedidos" data-roles="admin">
-      <i class="fas fa-clipboard-list"></i> Pedidos
-    </div>
+    <div class="nav-item" data-page="ventas" data-roles="admin"><i class="fas fa-receipt"></i> Ventas</div>
+    <div class="nav-item" data-page="caja-reporte" data-roles="admin"><i class="fas fa-money-bill-wave"></i> Caja</div>
+    <div class="nav-item" data-page="pedidos" data-roles="admin"><i class="fas fa-clipboard-list"></i> Pedidos</div>
 
     <div class="nav-label" data-roles="admin">Sistema</div>
-    <div class="nav-item" data-page="usuarios" data-roles="admin">
-      <i class="fas fa-users"></i> Usuarios
-    </div>
-    <div class="nav-item" data-page="config" data-roles="admin">
-      <i class="fas fa-sliders"></i> Configuración
-    </div>
+    <div class="nav-item" data-page="usuarios" data-roles="admin"><i class="fas fa-users"></i> Usuarios</div>
+    <div class="nav-item" data-page="config" data-roles="admin"><i class="fas fa-sliders"></i> Configuración</div>
   </nav>
 
   <div class="sidebar-footer">
     <div class="user-row" style="justify-content:space-between;">
       <div style="display:flex;align-items:center;gap:10px;">
         <div class="user-avatar" id="sb-avatar">?</div>
-        <div>
+        <div class="user-info">
           <div class="user-name" id="sb-name">—</div>
           <div class="user-role" id="sb-role">—</div>
         </div>
@@ -121,9 +97,14 @@
 
   <!-- TOPBAR -->
   <div class="topbar">
-    <div>
-      <div class="page-title" id="top-title">Punto de Venta</div>
-      <div class="page-sub"   id="top-sub">Registra tus ventas rápidamente</div>
+    <div class="topbar-left">
+      <button class="btn-sidebar-toggle" onclick="toggleSidebar()" title="Mostrar/ocultar menú">
+        <i class="fas fa-bars"></i>
+      </button>
+      <div>
+        <div class="page-title" id="top-title">Punto de Venta</div>
+        <div class="page-sub"   id="top-sub">Registra tus ventas rápidamente</div>
+      </div>
     </div>
     <div class="topbar-right">
       <span class="pill pill-success">● En línea</span>

@@ -1161,6 +1161,20 @@ async function doLogout() {
 // Verificar auth al cargar
 checkAuth();
 
+/* ─── SIDEBAR TOGGLE ─── */
+function toggleSidebar() {
+  const sidebar = document.querySelector('.sidebar');
+  const collapsed = sidebar.classList.toggle('collapsed');
+  localStorage.setItem('sidebar_collapsed', collapsed ? '1' : '0');
+}
+
+// Restaurar estado al cargar
+(function() {
+  if (localStorage.getItem('sidebar_collapsed') === '1') {
+    document.querySelector('.sidebar')?.classList.add('collapsed');
+  }
+})();
+
 /* ─── USUARIOS ─── */
 async function loadUsuarios() {
   try {
