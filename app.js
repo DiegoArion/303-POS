@@ -338,6 +338,7 @@ async function processSale() {
       metodoPago,
       ...(nota ? { nota } : {}),
       productos: cart.map(it => ({
+        productoId: it.esGranel ? it._baseId : it._id,
         codigo:    it.sku,
         nombre:    it.name,
         pVenta:    it.esGranel ? it._precioBase : it.price,

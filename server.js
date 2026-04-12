@@ -170,6 +170,18 @@ app.post('/api/ventas', wrap(async (req, res) => {
   };
 
   const result = await db.collection('ventas').insertOne(venta);
+
+  // Descontar stock de cada producto vendido
+  const stockOps = productos
+    .filter(p => p.productoId)
+    .map(p => ({
+      updateOne: {
+        filter: { _id: ObjectId.createFromHexString(p.productoId) },
+        update: { $inc: { stock: -p.cantidad } },
+      },
+    }));
+  if (stockOps.length) await db.collection('productos').bulkWrite(stockOps);
+
   res.status(201).json({ ...venta, _id: result.insertedId });
 }));
 
