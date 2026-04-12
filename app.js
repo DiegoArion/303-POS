@@ -145,7 +145,7 @@ function renderSalesGrid(list) {
 
   grid.innerHTML = list.map(p => {
     const out     = p.stock === 0;
-    const granel  = ES_GRANEL_UNIDAD(p.unidad);
+    const granel  = ES_GRANEL_UNIDAD(p.unidad, p.cat);
     const lbl     = p.stock === 0 ? 'Sin stock' : p.stock <= 5 ? `Solo ${p.stock}` : `${p.stock} uds`;
     const bg      = p.stock===0?'var(--danger-bg)':p.stock<=5?'var(--warning-bg)':'var(--success-bg)';
     const cl      = p.stock===0?'var(--danger)':p.stock<=5?'var(--warning)':'var(--success)';
@@ -746,7 +746,7 @@ document.getElementById('s-search').addEventListener('keydown', async e => {
   await loadSales();
   const p = products[0];
   if (!p) { toast('⚠️ Producto no encontrado'); return; }
-  if (ES_GRANEL_UNIDAD(p.unidad)) {
+  if (ES_GRANEL_UNIDAD(p.unidad, p.cat)) {
     openGranel(p._id);
   } else {
     addToCart(p._id);
@@ -780,7 +780,7 @@ function unidadOptions(selected = '') {
 }
 
 // Un producto se vende "a granel" si su unidad NO es "Unidad" y tiene unidad definida
-const ES_GRANEL_UNIDAD = u => u && u.toLowerCase() !== 'unidad';
+const ES_GRANEL_UNIDAD = (_u, cat) => !!cat && cat.toLowerCase().trim() === 'granel';
 
 function getFirstRowValues() {
   const first = document.querySelector('#bulk-body tr');
