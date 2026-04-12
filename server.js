@@ -10,8 +10,8 @@ function hashPwd(pw) {
 
 const sessions = new Map(); // token → { username, tipo, _id }
 
-const MONGO_URI  = 'mongodb+srv://Pos_db_user:DiIXdP9KWJzBARDS@lena.grmlcs0.mongodb.net/?appName=Lena';
-const DB_NAME    = 'pos_prod';
+const MONGO_URI  = 'mongodb://localhost:27017';
+const DB_NAME    = 'pos';
 const PORT       = 3000;
 
 const app    = express();
