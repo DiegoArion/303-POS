@@ -107,6 +107,7 @@
       </div>
     </div>
     <div class="topbar-right">
+      <span class="pill pill-version" id="version-pill" onclick="openVersionModal()" title="Ver versiones">—</span>
       <span class="pill pill-success">● En línea</span>
       <span class="time-display" id="clock"></span>
     </div>
@@ -792,6 +793,25 @@
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+
+<!-- MODAL VERSIÓN -->
+<div class="granel-overlay" id="version-overlay" onclick="if(event.target===this)closeVersionModal()">
+  <div class="granel-modal" style="max-width:420px;">
+    <div class="granel-head">
+      <div class="granel-name">Control de versiones</div>
+      <button class="granel-close" onclick="closeVersionModal()"><i class="fas fa-times"></i></button>
+    </div>
+    <div style="padding:20px;display:flex;flex-direction:column;gap:8px;">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:4px;">
+        Versión actual: <strong id="version-current">—</strong>
+      </div>
+      <div id="version-list" style="display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;"></div>
+      <div id="version-no-admin" style="display:none;color:var(--muted);font-size:13px;text-align:center;padding:12px 0;">
+        Solo los administradores pueden cambiar la versión.
+      </div>
+    </div>
+  </div>
+</div>
 
 <script src="app.js"></script>
 </body>

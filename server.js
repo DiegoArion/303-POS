@@ -2,6 +2,7 @@ const express            = require('express');
 const cors               = require('cors');
 const path               = require('path');
 const crypto             = require('crypto');
+const { execSync }       = require('child_process');
 const { MongoClient, ObjectId } = require('mongodb');
 
 // ── Config ───────────────────────────────────────────────────────
@@ -380,6 +381,37 @@ app.get('/api/dashboard', wrap(async (_req, res) => {
     },
     mes: porDia,
   });
+}));
+
+// ── Versión ──────────────────────────────────────────────────────
+function gitCmd(cmd) {
+  return execSync(cmd, { cwd: __dirname, timeout: 8000 }).toString().trim();
+}
+
+app.get('/api/version', wrap(async (_req, res) => {
+  try {
+    const current = gitCmd('git describe --tags --abbrev=0');
+    const tags    = gitCmd('git tag --sort=-version:refname').split('\n').filter(Boolean);
+    res.json({ current, tags });
+  } catch {
+    res.json({ current: null, tags: [] });
+  }
+}));
+
+app.post('/api/version/rollback', wrap(async (req, res) => {
+  const session = sessions.get(req.headers['x-token']);
+  if (!session || session.tipo !== 'admin') return res.status(403).json({ error: 'Solo administradores' });
+
+  const { version } = req.body;
+  if (!version) return res.status(400).json({ error: 'Versión requerida' });
+
+  try {
+    gitCmd(`git checkout ${version}`);
+    res.json({ ok: true });
+    setTimeout(() => process.exit(0), 400);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 }));
 
 // ── Estáticos y arranque ─────────────────────────────────────────

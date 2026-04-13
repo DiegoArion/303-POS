@@ -1079,6 +1079,7 @@ async function checkAuth() {
     _currentUser = await res.json();
     applyUser();
     hideLogin();
+    loadVersion();
   } catch { showLogin(); }
 }
 
@@ -1137,6 +1138,7 @@ async function doLogin() {
     _currentUser = data;
     applyUser();
     hideLogin();
+    loadVersion();
     document.getElementById('login-pass').value = '';
   } catch (e) {
     err.textContent = e.message;
@@ -1160,6 +1162,63 @@ async function doLogout() {
 
 // Verificar auth al cargar
 checkAuth();
+
+/* ─── VERSIÓN ─── */
+let _versionData = null;
+
+async function loadVersion() {
+  try {
+    const data = await apiFetch('/api/version');
+    _versionData = data;
+    const pill = document.getElementById('version-pill');
+    if (pill) pill.textContent = data.current ?? 'sin versión';
+  } catch { /* sin internet o git */ }
+}
+
+function openVersionModal() {
+  if (!_versionData) return;
+  const isAdmin = _currentUser?.tipo === 'admin';
+
+  document.getElementById('version-current').textContent = _versionData.current ?? 'sin versión';
+  document.getElementById('version-no-admin').style.display = isAdmin ? 'none' : '';
+
+  const list = document.getElementById('version-list');
+  if (!_versionData.tags.length) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:13px;text-align:center;padding:12px 0;">Sin versiones etiquetadas</div>';
+  } else {
+    list.innerHTML = _versionData.tags.map(tag => {
+      const isCurrent = tag === _versionData.current;
+      return `
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-radius:8px;background:var(--bg);border:1px solid ${isCurrent ? 'var(--primary)' : 'var(--border)'};">
+          <span style="font-weight:600;${isCurrent ? 'color:var(--primary)' : ''}">${tag}${isCurrent ? ' <span style="font-size:11px;font-weight:400;">(actual)</span>' : ''}</span>
+          ${isAdmin && !isCurrent
+            ? `<button class="btn-primary" style="padding:5px 14px;font-size:13px;" onclick="doRollback('${tag}')">Bajar a esta</button>`
+            : ''}
+        </div>`;
+    }).join('');
+  }
+
+  document.getElementById('version-overlay').classList.add('open');
+}
+
+function closeVersionModal() {
+  document.getElementById('version-overlay').classList.remove('open');
+}
+
+async function doRollback(version) {
+  if (!confirm(`¿Cambiar a la versión ${version}? El servidor se reiniciará.`)) return;
+  try {
+    await apiFetch('/api/version/rollback', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ version }),
+    });
+    toast(`🔄 Cambiando a ${version}... la página se recargará en 3s`);
+    setTimeout(() => location.reload(), 3000);
+  } catch (err) {
+    toast(`❌ ${err.message}`);
+  }
+}
 
 /* ─── SIDEBAR TOGGLE ─── */
 function toggleSidebar() {
