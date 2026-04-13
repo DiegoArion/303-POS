@@ -686,87 +686,136 @@
     <!-- ── INVENTARIADO ── -->
     <div class="page" id="page-inventariado">
 
-      <!-- Scanner input + botón terminar -->
-      <div style="display:flex;gap:12px;margin-bottom:20px;align-items:stretch;">
-        <div class="table-card inv-scanner-card" style="flex:1;margin-bottom:0;">
-          <i class="fas fa-barcode" style="font-size:22px;color:var(--primary);flex-shrink:0;"></i>
-          <input id="inv-input" type="text" placeholder="Escanea o escribe el código de barras y presiona Enter…"
-            onkeydown="if(event.key==='Enter'){ handleInvScan(this.value.trim()); this.value=''; }">
+      <!-- PASO 1: Selección de tipo -->
+      <div id="inv-seleccion">
+        <div style="max-width:560px;margin:40px auto;">
+          <div style="text-align:center;margin-bottom:28px;">
+            <div style="font-size:20px;font-weight:700;">¿Qué tipo de inventario vas a hacer?</div>
+            <div style="font-size:14px;color:var(--muted);margin-top:6px;">Selecciona el alcance antes de comenzar</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div class="inv-tipo-card" onclick="iniciarInventario('parcial')">
+              <i class="fas fa-list-check" style="font-size:28px;color:var(--primary);margin-bottom:12px;display:block;"></i>
+              <div style="font-size:16px;font-weight:700;margin-bottom:6px;">Inventario Parcial</div>
+              <div style="font-size:13px;color:var(--muted);line-height:1.5;">Revisa productos específicos. Solo se registran los que escanees. Útil para verificaciones rápidas o productos puntuales.</div>
+            </div>
+            <div class="inv-tipo-card" onclick="iniciarInventario('completo')">
+              <i class="fas fa-clipboard-list" style="font-size:28px;color:var(--primary);margin-bottom:12px;display:block;"></i>
+              <div style="font-size:16px;font-weight:700;margin-bottom:6px;">Inventario Completo</div>
+              <div style="font-size:13px;color:var(--muted);line-height:1.5;">Revisa todo el catálogo. Se muestra la lista de productos pendientes y el reporte final incluye los no inventariados.</div>
+            </div>
+          </div>
         </div>
-        <button onclick="terminarInventario()"
-          style="background:var(--primary);color:#fff;border:none;border-radius:var(--radius);padding:0 20px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:8px;">
-          <i class="fas fa-flag-checkered"></i> Terminar inventario
-        </button>
       </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
+      <!-- PASO 2: Trabajo de inventario -->
+      <div id="inv-trabajo" style="display:none;">
 
-        <!-- Producto actual -->
-        <div class="table-card inv-actual-card" id="inv-actual-card">
-          <div id="inv-actual-empty" style="text-align:center;color:var(--muted);padding:40px 0;">
-            <i class="fas fa-barcode" style="font-size:40px;margin-bottom:12px;display:block;"></i>
-            Escanea un producto para comenzar
+        <!-- Header: tipo + terminar -->
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <span id="inv-tipo-badge" class="pill"></span>
+          <div class="table-card inv-scanner-card" style="flex:1;margin-bottom:0;">
+            <i class="fas fa-barcode" style="font-size:20px;color:var(--primary);flex-shrink:0;"></i>
+            <input id="inv-input" type="text" placeholder="Escanea o escribe el código de barras y presiona Enter…"
+              onkeydown="if(event.key==='Enter'){ handleInvScan(this.value.trim()); this.value=''; }">
           </div>
-          <div id="inv-actual-info" style="display:none;">
-
-            <!-- Info del producto -->
-            <div style="margin-bottom:20px;">
-              <div id="inv-actual-nombre" style="font-size:18px;font-weight:700;margin-bottom:2px;"></div>
-              <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px;">
-                <span id="inv-actual-codigo" style="font-size:12px;color:var(--muted);"></span>
-                <span id="inv-actual-prov"   style="font-size:12px;color:var(--muted);"></span>
-                <span id="inv-actual-precio" style="font-size:12px;color:var(--muted);"></span>
-              </div>
-            </div>
-
-            <!-- Stock anterior + confirmar -->
-            <div id="inv-confirmar-bloque" style="background:var(--bg);border-radius:var(--radius);padding:14px 16px;margin-bottom:18px;">
-              <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Stock registrado actualmente</div>
-              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
-                <span id="inv-stock-anterior" style="font-size:28px;font-weight:800;color:var(--text);">0</span>
-                <button onclick="confirmarStockActual()"
-                  style="background:var(--success-bg);color:#166534;border:1.5px solid var(--success);border-radius:var(--radius);padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">
-                  <i class="fas fa-check-double"></i> Confirmar — están todos
-                </button>
-              </div>
-            </div>
-
-            <!-- Contador manual -->
-            <div style="text-align:center;">
-              <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">O ingresa la cantidad real</div>
-              <div id="inv-contador" class="inv-contador">0</div>
-              <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;">
-                <button class="inv-btn-adj" onclick="invAjustar(-1)"><i class="fas fa-minus"></i></button>
-                <button class="btn-primary" style="flex:1;justify-content:center;" onclick="guardarInvActual(true)">
-                  <i class="fas fa-check"></i> Guardar cantidad
-                </button>
-                <button class="inv-btn-adj" onclick="invAjustar(1)"><i class="fas fa-plus"></i></button>
-              </div>
-            </div>
-
-          </div>
+          <button onclick="terminarInventario()" class="btn-primary" style="white-space:nowrap;padding:10px 18px;">
+            <i class="fas fa-flag-checkered"></i> Terminar
+          </button>
         </div>
 
-        <!-- Log de sesión -->
-        <div class="table-card" style="overflow:hidden;">
-          <div style="padding:14px 18px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px;">
-            Registrados hoy
+        <!-- Grid principal -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;margin-bottom:16px;">
+
+          <!-- Producto actual -->
+          <div class="table-card inv-actual-card" id="inv-actual-card">
+            <div id="inv-actual-empty" style="text-align:center;color:var(--muted);padding:36px 0;">
+              <i class="fas fa-barcode" style="font-size:36px;margin-bottom:10px;display:block;"></i>
+              Escanea un producto para comenzar
+            </div>
+            <div id="inv-actual-info" style="display:none;">
+              <div style="margin-bottom:16px;">
+                <div id="inv-actual-nombre" style="font-size:17px;font-weight:700;margin-bottom:2px;"></div>
+                <div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:4px;">
+                  <span id="inv-actual-codigo" style="font-size:12px;color:var(--muted);"></span>
+                  <span id="inv-actual-prov"   style="font-size:12px;color:var(--muted);"></span>
+                  <span id="inv-actual-precio" style="font-size:12px;color:var(--muted);"></span>
+                </div>
+              </div>
+              <div style="background:var(--bg);border-radius:var(--radius);padding:12px 14px;margin-bottom:16px;">
+                <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Stock registrado actualmente</div>
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+                  <span id="inv-stock-anterior" style="font-size:26px;font-weight:800;">0</span>
+                  <button onclick="confirmarStockActual()"
+                    style="background:var(--success-bg);color:#166534;border:1.5px solid var(--success);border-radius:var(--radius);padding:7px 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">
+                    <i class="fas fa-check-double"></i> Confirmar — están todos
+                  </button>
+                </div>
+              </div>
+              <div style="text-align:center;">
+                <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">O ingresa la cantidad real</div>
+                <div id="inv-contador" class="inv-contador">0</div>
+                <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;">
+                  <button class="inv-btn-adj" onclick="invAjustar(-1)"><i class="fas fa-minus"></i></button>
+                  <button class="btn-primary" style="flex:1;justify-content:center;" onclick="guardarInvActual(true)">
+                    <i class="fas fa-check"></i> Guardar cantidad
+                  </button>
+                  <button class="inv-btn-adj" onclick="invAjustar(1)"><i class="fas fa-plus"></i></button>
+                </div>
+              </div>
+            </div>
           </div>
-          <div style="overflow-y:auto;max-height:460px;">
-            <table style="width:100%;border-collapse:collapse;">
-              <thead>
-                <tr style="background:var(--bg);">
-                  <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Producto</th>
-                  <th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Ant.</th>
-                  <th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Nuevo</th>
-                  <th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Var.</th>
-                  <th style="padding:10px 14px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Hora</th>
-                </tr>
-              </thead>
-              <tbody id="inv-log-body">
-                <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">Sin registros hoy</td></tr>
-              </tbody>
-            </table>
+
+          <!-- Inventariados -->
+          <div class="table-card" style="overflow:hidden;">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--border);font-weight:700;font-size:14px;">
+              Inventariados <span id="inv-log-count" style="font-size:12px;color:var(--muted);font-weight:400;"></span>
+            </div>
+            <div style="overflow-y:auto;max-height:380px;">
+              <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                  <tr style="background:var(--bg);">
+                    <th class="inv-th">Producto</th>
+                    <th class="inv-th" style="text-align:center;">Ant.</th>
+                    <th class="inv-th" style="text-align:center;">Nuevo</th>
+                    <th class="inv-th" style="text-align:center;">Var.</th>
+                    <th class="inv-th" style="text-align:right;">Hora</th>
+                  </tr>
+                </thead>
+                <tbody id="inv-log-body">
+                  <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:20px;">Sin registros</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Pendientes (solo inventario completo) -->
+        <div id="inv-pendientes-section" style="display:none;">
+          <div class="table-card" style="overflow:hidden;">
+            <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;">
+              <div style="font-weight:700;font-size:14px;">
+                Pendientes por inventariar
+                <span id="inv-pendientes-count" style="font-size:12px;color:var(--muted);font-weight:400;"></span>
+              </div>
+              <input id="inv-pendientes-search" type="text" placeholder="Buscar…"
+                style="padding:5px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:180px;"
+                oninput="renderInvPendientes()">
+            </div>
+            <div style="overflow-y:auto;max-height:280px;">
+              <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                  <tr style="background:var(--bg);">
+                    <th class="inv-th">Producto</th>
+                    <th class="inv-th">Categoría</th>
+                    <th class="inv-th">Proveedor</th>
+                    <th class="inv-th" style="text-align:center;">Stock actual</th>
+                  </tr>
+                </thead>
+                <tbody id="inv-pendientes-body"></tbody>
+              </table>
+            </div>
           </div>
         </div>
 
