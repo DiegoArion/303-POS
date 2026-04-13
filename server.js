@@ -386,16 +386,20 @@ app.get('/api/dashboard', wrap(async (_req, res) => {
 
 // ── Inventariado ─────────────────────────────────────────────────
 app.post('/api/inventariado', wrap(async (req, res) => {
-  const { productoId, nombre, cantidad } = req.body;
+  const { productoId, nombre, cantidad, stockAnterior, proveedor, pVenta } = req.body;
   if (!nombre || cantidad == null) return res.status(400).json({ error: 'Datos incompletos' });
   const ahora = new Date();
   const doc = {
-    productoId: productoId || null,
+    productoId:    productoId || null,
     nombre,
-    cantidad: parseInt(cantidad),
-    fecha:    localDate(),
-    hora:     ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
-    creadoEn: ahora,
+    cantidad:      parseInt(cantidad),
+    stockAnterior: stockAnterior ?? null,
+    proveedor:     proveedor || '',
+    pVenta:        pVenta ?? null,
+    variacion:     stockAnterior != null ? parseInt(cantidad) - stockAnterior : null,
+    fecha:         localDate(),
+    hora:          ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+    creadoEn:      ahora,
   };
   await db.collection('inventariado').insertOne(doc);
   if (productoId) {

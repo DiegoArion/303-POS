@@ -686,11 +686,17 @@
     <!-- ── INVENTARIADO ── -->
     <div class="page" id="page-inventariado">
 
-      <!-- Scanner input -->
-      <div class="table-card inv-scanner-card">
-        <i class="fas fa-barcode" style="font-size:22px;color:var(--primary);flex-shrink:0;"></i>
-        <input id="inv-input" type="text" placeholder="Escanea o escribe el código de barras y presiona Enter…"
-          onkeydown="if(event.key==='Enter'){ handleInvScan(this.value.trim()); this.value=''; }">
+      <!-- Scanner input + botón terminar -->
+      <div style="display:flex;gap:12px;margin-bottom:20px;align-items:stretch;">
+        <div class="table-card inv-scanner-card" style="flex:1;margin-bottom:0;">
+          <i class="fas fa-barcode" style="font-size:22px;color:var(--primary);flex-shrink:0;"></i>
+          <input id="inv-input" type="text" placeholder="Escanea o escribe el código de barras y presiona Enter…"
+            onkeydown="if(event.key==='Enter'){ handleInvScan(this.value.trim()); this.value=''; }">
+        </div>
+        <button onclick="terminarInventario()"
+          style="background:var(--primary);color:#fff;border:none;border-radius:var(--radius);padding:0 20px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:8px;">
+          <i class="fas fa-flag-checkered"></i> Terminar inventario
+        </button>
       </div>
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
@@ -701,17 +707,43 @@
             <i class="fas fa-barcode" style="font-size:40px;margin-bottom:12px;display:block;"></i>
             Escanea un producto para comenzar
           </div>
-          <div id="inv-actual-info" style="display:none;text-align:center;">
-            <div id="inv-actual-nombre" style="font-size:19px;font-weight:700;margin-bottom:4px;"></div>
-            <div id="inv-actual-codigo" style="font-size:13px;color:var(--muted);margin-bottom:24px;"></div>
-            <div id="inv-contador" class="inv-contador">0</div>
-            <div style="display:flex;gap:10px;justify-content:center;margin-top:24px;">
-              <button class="inv-btn-adj" onclick="invAjustar(-1)"><i class="fas fa-minus"></i></button>
-              <button class="btn-primary" style="flex:1;justify-content:center;" onclick="guardarInvActual(true)">
-                <i class="fas fa-check"></i> Guardar
-              </button>
-              <button class="inv-btn-adj" onclick="invAjustar(1)"><i class="fas fa-plus"></i></button>
+          <div id="inv-actual-info" style="display:none;">
+
+            <!-- Info del producto -->
+            <div style="margin-bottom:20px;">
+              <div id="inv-actual-nombre" style="font-size:18px;font-weight:700;margin-bottom:2px;"></div>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:4px;">
+                <span id="inv-actual-codigo" style="font-size:12px;color:var(--muted);"></span>
+                <span id="inv-actual-prov"   style="font-size:12px;color:var(--muted);"></span>
+                <span id="inv-actual-precio" style="font-size:12px;color:var(--muted);"></span>
+              </div>
             </div>
+
+            <!-- Stock anterior + confirmar -->
+            <div id="inv-confirmar-bloque" style="background:var(--bg);border-radius:var(--radius);padding:14px 16px;margin-bottom:18px;">
+              <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Stock registrado actualmente</div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                <span id="inv-stock-anterior" style="font-size:28px;font-weight:800;color:var(--text);">0</span>
+                <button onclick="confirmarStockActual()"
+                  style="background:var(--success-bg);color:#166534;border:1.5px solid var(--success);border-radius:var(--radius);padding:8px 16px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">
+                  <i class="fas fa-check-double"></i> Confirmar — están todos
+                </button>
+              </div>
+            </div>
+
+            <!-- Contador manual -->
+            <div style="text-align:center;">
+              <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">O ingresa la cantidad real</div>
+              <div id="inv-contador" class="inv-contador">0</div>
+              <div style="display:flex;gap:10px;justify-content:center;margin-top:16px;">
+                <button class="inv-btn-adj" onclick="invAjustar(-1)"><i class="fas fa-minus"></i></button>
+                <button class="btn-primary" style="flex:1;justify-content:center;" onclick="guardarInvActual(true)">
+                  <i class="fas fa-check"></i> Guardar cantidad
+                </button>
+                <button class="inv-btn-adj" onclick="invAjustar(1)"><i class="fas fa-plus"></i></button>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -720,17 +752,19 @@
           <div style="padding:14px 18px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px;">
             Registrados hoy
           </div>
-          <div style="overflow-y:auto;max-height:420px;">
+          <div style="overflow-y:auto;max-height:460px;">
             <table style="width:100%;border-collapse:collapse;">
               <thead>
                 <tr style="background:var(--bg);">
                   <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Producto</th>
-                  <th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Cant.</th>
+                  <th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Ant.</th>
+                  <th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Nuevo</th>
+                  <th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Var.</th>
                   <th style="padding:10px 14px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Hora</th>
                 </tr>
               </thead>
               <tbody id="inv-log-body">
-                <tr><td colspan="3" style="text-align:center;color:var(--muted);padding:24px;">Sin registros hoy</td></tr>
+                <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">Sin registros hoy</td></tr>
               </tbody>
             </table>
           </div>
@@ -850,6 +884,35 @@
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+
+<!-- MODAL REPORTE INVENTARIO -->
+<div class="granel-overlay" id="inv-reporte-overlay" onclick="if(event.target===this)closeInvReporte()">
+  <div class="granel-modal" style="max-width:780px;width:95vw;">
+    <div class="granel-head">
+      <div class="granel-name">Reporte de inventario</div>
+      <button class="granel-close" onclick="closeInvReporte()"><i class="fas fa-times"></i></button>
+    </div>
+    <div style="padding:20px;">
+      <div id="inv-reporte-resumen" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;"></div>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="background:var(--bg);">
+              <th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Producto</th>
+              <th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Proveedor</th>
+              <th style="padding:10px 12px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">P. Unit.</th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Ant.</th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Nuevo</th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Variación</th>
+              <th style="padding:10px 12px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Valor $</th>
+            </tr>
+          </thead>
+          <tbody id="inv-reporte-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL INVENTARIADO — PRODUCTO NO ENCONTRADO -->
 <div class="granel-overlay" id="inv-new-overlay" onclick="if(event.target===this)closeInvNew()">

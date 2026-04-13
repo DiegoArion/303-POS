@@ -1195,7 +1195,10 @@ function renderInvActual() {
   empty.style.display = 'none';
   info.style.display  = '';
   document.getElementById('inv-actual-nombre').textContent = _invActual.nombre;
-  document.getElementById('inv-actual-codigo').textContent = _invActual.codigo || '';
+  document.getElementById('inv-actual-codigo').textContent = _invActual.codigo ? `Código: ${_invActual.codigo}` : '';
+  document.getElementById('inv-actual-prov').textContent   = _invActual.proveedor ? `Proveedor: ${_invActual.proveedor}` : '';
+  document.getElementById('inv-actual-precio').textContent = _invActual.pVenta != null ? `Precio: ${fmt(_invActual.pVenta)}` : '';
+  document.getElementById('inv-stock-anterior').textContent = _invActual.stockAnterior ?? '—';
   document.getElementById('inv-contador').textContent      = _invCantidad;
 }
 
@@ -1221,10 +1224,23 @@ async function handleInvScan(codigo) {
     renderInvActual();
   } else {
     if (_invActual) await guardarInvActual(false);
-    _invActual   = { _id: String(producto._id), nombre: producto.producto, codigo: producto.codigo };
+    _invActual = {
+      _id:           String(producto._id),
+      nombre:        producto.producto,
+      codigo:        producto.codigo   || '',
+      proveedor:     producto.proveedor || '',
+      pVenta:        producto.pVenta   ?? null,
+      stockAnterior: producto.stock    ?? 0,
+    };
     _invCantidad = 1;
     renderInvActual();
   }
+}
+
+async function confirmarStockActual() {
+  if (!_invActual) return;
+  _invCantidad = _invActual.stockAnterior ?? 0;
+  await guardarInvActual(true);
 }
 
 function invAjustar(delta) {
@@ -1234,11 +1250,18 @@ function invAjustar(delta) {
 }
 
 async function guardarInvActual(manual = false) {
-  if (!_invActual || _invCantidad === 0) return;
+  if (!_invActual) return;
   try {
     await apiFetch('/inventariado', {
-      method:  'POST',
-      body:    JSON.stringify({ productoId: _invActual._id, nombre: _invActual.nombre, cantidad: _invCantidad }),
+      method: 'POST',
+      body:   JSON.stringify({
+        productoId:    _invActual._id,
+        nombre:        _invActual.nombre,
+        cantidad:      _invCantidad,
+        stockAnterior: _invActual.stockAnterior,
+        proveedor:     _invActual.proveedor,
+        pVenta:        _invActual.pVenta,
+      }),
     });
     toast(`✅ ${_invActual.nombre} — ${_invCantidad} uds guardadas`);
     _invActual   = null;
@@ -1254,16 +1277,74 @@ async function loadInvLog() {
     const logs  = await apiFetch('/inventariado');
     const tbody = document.getElementById('inv-log-body');
     if (!logs.length) {
-      tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:24px;">Sin registros hoy</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:24px;">Sin registros hoy</td></tr>`;
       return;
     }
-    tbody.innerHTML = logs.map(r => `
-      <tr style="border-bottom:1px solid var(--border);">
-        <td style="padding:10px 14px;font-weight:500;">${r.nombre}</td>
-        <td style="padding:10px 14px;text-align:center;font-weight:700;color:var(--primary);">${r.cantidad}</td>
-        <td style="padding:10px 14px;text-align:right;color:var(--muted);font-size:13px;">${r.hora}</td>
-      </tr>`).join('');
+    tbody.innerHTML = logs.map(r => {
+      const v     = r.variacion;
+      const vStr  = v == null ? '—' : (v > 0 ? `+${v}` : String(v));
+      const vColor = v == null ? 'var(--muted)' : v > 0 ? 'var(--success)' : v < 0 ? 'var(--danger)' : 'var(--muted)';
+      return `
+        <tr style="border-bottom:1px solid var(--border);">
+          <td style="padding:10px 14px;font-weight:500;">${r.nombre}</td>
+          <td style="padding:10px 14px;text-align:center;color:var(--muted);">${r.stockAnterior ?? '—'}</td>
+          <td style="padding:10px 14px;text-align:center;font-weight:700;color:var(--primary);">${r.cantidad}</td>
+          <td style="padding:10px 14px;text-align:center;font-weight:700;color:${vColor};">${vStr}</td>
+          <td style="padding:10px 14px;text-align:right;color:var(--muted);font-size:12px;">${r.hora}</td>
+        </tr>`;
+    }).join('');
   } catch { /* ignorar */ }
+}
+
+async function terminarInventario() {
+  // Guardar producto actual si hay uno pendiente
+  if (_invActual) await guardarInvActual(false);
+
+  const logs = await apiFetch('/inventariado').catch(() => []);
+  if (!logs.length) { toast('⚠️ No hay registros en esta sesión'); return; }
+
+  // Resumen general
+  const totalProductos  = logs.length;
+  const conVariacion    = logs.filter(r => r.variacion !== 0 && r.variacion != null);
+  const faltantes       = logs.filter(r => r.variacion != null && r.variacion < 0);
+  const valorTotal      = logs.reduce((s, r) => r.variacion != null && r.pVenta != null ? s + r.variacion * r.pVenta : s, 0);
+
+  const stat = (label, value, color = 'var(--text)') => `
+    <div class="table-card" style="padding:16px;text-align:center;">
+      <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">${label}</div>
+      <div style="font-size:22px;font-weight:800;color:${color};">${value}</div>
+    </div>`;
+
+  document.getElementById('inv-reporte-resumen').innerHTML =
+    stat('Productos contados', totalProductos) +
+    stat('Con variación', conVariacion.length, conVariacion.length ? 'var(--warning, #f59e0b)' : 'var(--muted)') +
+    stat('Faltantes', faltantes.length, faltantes.length ? 'var(--danger)' : 'var(--muted)') +
+    stat('Impacto económico', (valorTotal >= 0 ? '+' : '') + fmt(valorTotal), valorTotal < 0 ? 'var(--danger)' : valorTotal > 0 ? 'var(--success)' : 'var(--muted)');
+
+  document.getElementById('inv-reporte-body').innerHTML = logs.map(r => {
+    const v      = r.variacion;
+    const vStr   = v == null ? '—' : (v > 0 ? `+${v}` : String(v));
+    const vColor = v == null ? '' : v > 0 ? 'color:var(--success);' : v < 0 ? 'color:var(--danger);' : '';
+    const valor  = r.variacion != null && r.pVenta != null ? r.variacion * r.pVenta : null;
+    const vMoney = valor == null ? '—' : (valor > 0 ? '+' : '') + fmt(valor);
+    const mColor = valor == null ? '' : valor > 0 ? 'color:var(--success);' : valor < 0 ? 'color:var(--danger);' : '';
+    return `
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 12px;font-weight:600;">${r.nombre}</td>
+        <td style="padding:10px 12px;color:var(--muted);">${r.proveedor || '—'}</td>
+        <td style="padding:10px 12px;text-align:right;">${r.pVenta != null ? fmt(r.pVenta) : '—'}</td>
+        <td style="padding:10px 12px;text-align:center;color:var(--muted);">${r.stockAnterior ?? '—'}</td>
+        <td style="padding:10px 12px;text-align:center;font-weight:700;">${r.cantidad}</td>
+        <td style="padding:10px 12px;text-align:center;font-weight:700;${vColor}">${vStr}</td>
+        <td style="padding:10px 12px;text-align:right;font-weight:700;${mColor}">${vMoney}</td>
+      </tr>`;
+  }).join('');
+
+  document.getElementById('inv-reporte-overlay').classList.add('open');
+}
+
+function closeInvReporte() {
+  document.getElementById('inv-reporte-overlay').classList.remove('open');
 }
 
 function openInvNew(codigo) {
