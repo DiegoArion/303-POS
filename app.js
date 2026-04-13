@@ -68,6 +68,7 @@ const PAGE_META = {
   config:       { title:'Configuración',     sub:'Gestiona las categorías y proveedores disponibles' },
   'caja-mov':     { title:'Mov. de Caja',    sub:'Registra entradas y salidas de efectivo' },
   'caja-reporte': { title:'Reporte de Caja', sub:'Movimientos de caja por día' },
+  inventariado:   { title:'Inventariado',    sub:'Escanea productos para actualizar el stock' },
 };
 
 document.querySelectorAll('.nav-item').forEach(el => {
@@ -89,6 +90,7 @@ document.querySelectorAll('.nav-item').forEach(el => {
     if (page === 'usuarios')     loadUsuarios();
     if (page === 'caja-mov')     initCajaMov();
     if (page === 'caja-reporte') initCajaReporte();
+    if (page === 'inventariado') initInventariado();
   });
 });
 
@@ -1168,6 +1170,142 @@ async function doLogout() {
 
 // Verificar auth al cargar
 checkAuth();
+
+/* ─── INVENTARIADO ─── */
+let _invActual   = null;
+let _invCantidad = 0;
+let _invCodigo   = '';
+
+async function initInventariado() {
+  _invActual   = null;
+  _invCantidad = 0;
+  renderInvActual();
+  await loadInvLog();
+  document.getElementById('inv-input')?.focus();
+}
+
+function renderInvActual() {
+  const empty = document.getElementById('inv-actual-empty');
+  const info  = document.getElementById('inv-actual-info');
+  if (!_invActual) {
+    empty.style.display = '';
+    info.style.display  = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  info.style.display  = '';
+  document.getElementById('inv-actual-nombre').textContent = _invActual.nombre;
+  document.getElementById('inv-actual-codigo').textContent = _invActual.codigo || '';
+  document.getElementById('inv-contador').textContent      = _invCantidad;
+}
+
+async function handleInvScan(codigo) {
+  if (!codigo) return;
+  document.getElementById('inv-input').focus();
+
+  let producto = null;
+  try {
+    const lista = await apiFetch(`/productos?codigo=${encodeURIComponent(codigo)}`);
+    producto = lista[0] ?? null;
+  } catch { toast('❌ Error buscando producto'); return; }
+
+  if (!producto) {
+    openInvNew(codigo);
+    return;
+  }
+
+  const mismoProducto = _invActual && _invActual._id === String(producto._id);
+
+  if (mismoProducto) {
+    _invCantidad++;
+    renderInvActual();
+  } else {
+    if (_invActual) await guardarInvActual(false);
+    _invActual   = { _id: String(producto._id), nombre: producto.producto, codigo: producto.codigo };
+    _invCantidad = 1;
+    renderInvActual();
+  }
+}
+
+function invAjustar(delta) {
+  if (!_invActual) return;
+  _invCantidad = Math.max(0, _invCantidad + delta);
+  renderInvActual();
+}
+
+async function guardarInvActual(manual = false) {
+  if (!_invActual || _invCantidad === 0) return;
+  try {
+    await apiFetch('/inventariado', {
+      method:  'POST',
+      body:    JSON.stringify({ productoId: _invActual._id, nombre: _invActual.nombre, cantidad: _invCantidad }),
+    });
+    toast(`✅ ${_invActual.nombre} — ${_invCantidad} uds guardadas`);
+    _invActual   = null;
+    _invCantidad = 0;
+    renderInvActual();
+    await loadInvLog();
+  } catch (err) { toast(`❌ ${err.message}`); }
+  if (manual) document.getElementById('inv-input')?.focus();
+}
+
+async function loadInvLog() {
+  try {
+    const logs  = await apiFetch('/inventariado');
+    const tbody = document.getElementById('inv-log-body');
+    if (!logs.length) {
+      tbody.innerHTML = `<tr><td colspan="3" style="text-align:center;color:var(--muted);padding:24px;">Sin registros hoy</td></tr>`;
+      return;
+    }
+    tbody.innerHTML = logs.map(r => `
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 14px;font-weight:500;">${r.nombre}</td>
+        <td style="padding:10px 14px;text-align:center;font-weight:700;color:var(--primary);">${r.cantidad}</td>
+        <td style="padding:10px 14px;text-align:right;color:var(--muted);font-size:13px;">${r.hora}</td>
+      </tr>`).join('');
+  } catch { /* ignorar */ }
+}
+
+function openInvNew(codigo) {
+  _invCodigo = codigo;
+  document.getElementById('inv-new-codigo').textContent   = codigo;
+  document.getElementById('inv-new-nombre').value         = '';
+  document.getElementById('inv-new-pventa').value         = '';
+  document.getElementById('inv-new-pcosto').value         = '';
+  document.getElementById('inv-new-cat').innerHTML        = catOptions();
+  document.getElementById('inv-new-unidad').innerHTML     = unidadOptions();
+  document.getElementById('inv-new-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('inv-new-nombre').focus(), 100);
+}
+
+function closeInvNew() {
+  document.getElementById('inv-new-overlay').classList.remove('open');
+  document.getElementById('inv-input')?.focus();
+}
+
+async function guardarInvNuevo() {
+  const nombre = document.getElementById('inv-new-nombre').value.trim();
+  const pVenta = parseFloat(document.getElementById('inv-new-pventa').value);
+  const pCosto = parseFloat(document.getElementById('inv-new-pcosto').value) || null;
+  const cat    = document.getElementById('inv-new-cat').value;
+  const unidad = document.getElementById('inv-new-unidad').value;
+
+  if (!nombre)              { toast('⚠️ El nombre es requerido'); return; }
+  if (!pVenta || pVenta <= 0) { toast('⚠️ El precio de venta es requerido'); return; }
+
+  try {
+    const prod = await apiFetch('/productos', {
+      method: 'POST',
+      body:   JSON.stringify({ codigo: _invCodigo, producto: nombre, pVenta, pCosto, categoria: cat, unidad, stock: 0 }),
+    });
+    closeInvNew();
+    toast('✅ Producto registrado');
+    if (_invActual) await guardarInvActual(false);
+    _invActual   = { _id: String(prod._id), nombre: prod.producto, codigo: prod.codigo };
+    _invCantidad = 1;
+    renderInvActual();
+  } catch (err) { toast(`❌ ${err.message}`); }
+}
 
 /* ─── VERSIÓN ─── */
 let _versionData = null;

@@ -70,10 +70,11 @@ app.use(express.json());
 
 // ── Productos ────────────────────────────────────────────────────
 app.get('/api/productos', wrap(async (req, res) => {
-  const { q, cat } = req.query;
+  const { q, cat, codigo } = req.query;
   const filtro = {};
   if (cat && cat !== 'Todos') filtro.categoria = { $regex: new RegExp(`^${cat}$`, 'i') };
-  if (q) filtro.$or = [
+  if (codigo) filtro.codigo = codigo;                          // búsqueda exacta por código
+  else if (q) filtro.$or = [
     { producto:  { $regex: q, $options: 'i' } },
     { codigo:    { $regex: q, $options: 'i' } },
     { categoria: { $regex: q, $options: 'i' } },
@@ -92,7 +93,7 @@ app.put('/api/productos/:id', wrap(async (req, res) => {
   if (!req.body.producto?.trim()) return res.status(400).json({ error: 'El nombre del producto es requerido' });
   const update = buildProductDoc(req.body);
   const result = await db.collection('productos').updateOne(
-    { _id: new ObjectId(req.params.id) }, { $set: update }
+    { _id: ObjectId.createFromHexString(req.params.id) }, { $set: update }
   );
   if (result.matchedCount === 0) return res.status(404).json({ error: 'Producto no encontrado' });
   res.json({ _id: req.params.id, ...update });
@@ -189,7 +190,7 @@ app.post('/api/ventas', wrap(async (req, res) => {
 app.patch('/api/ventas/:id/nota', wrap(async (req, res) => {
   const nota   = (req.body.nota ?? '').trim();
   const result = await db.collection('ventas').updateOne(
-    { _id: new ObjectId(req.params.id) },
+    { _id: ObjectId.createFromHexString(req.params.id) },
     nota ? { $set: { nota } } : { $unset: { nota: '' } }
   );
   if (result.matchedCount === 0) return res.status(404).json({ error: 'Venta no encontrada' });
@@ -241,7 +242,7 @@ app.post('/api/pedidos', wrap(async (req, res) => {
     if (!item.productoId) continue;
     try {
       await db.collection('productos').updateOne(
-        { _id: new ObjectId(item.productoId) }, { $inc: { stock: item.cantidad } }
+        { _id: ObjectId.createFromHexString(item.productoId) }, { $inc: { stock: item.cantidad } }
       );
     } catch { /* id inválido, ignorar */ }
   }
@@ -303,18 +304,18 @@ app.patch('/api/usuarios/:id', wrap(async (req, res) => {
   if (tipo && ['admin', 'vendedor'].includes(tipo)) set.tipo = tipo;
   if (password?.trim()) set.password = hashPwd(password);
   if (!Object.keys(set).length) return res.status(400).json({ error: 'Sin cambios' });
-  await db.collection('usuarios').updateOne({ _id: new ObjectId(req.params.id) }, { $set: set });
+  await db.collection('usuarios').updateOne({ _id: ObjectId.createFromHexString(req.params.id) }, { $set: set });
   res.json({ ok: true });
 }));
 
 app.delete('/api/usuarios/:id', wrap(async (req, res) => {
-  const user = await db.collection('usuarios').findOne({ _id: new ObjectId(req.params.id) });
+  const user = await db.collection('usuarios').findOne({ _id: ObjectId.createFromHexString(req.params.id) });
   if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
   if (user.tipo === 'admin') {
     const admins = await db.collection('usuarios').countDocuments({ tipo: 'admin' });
     if (admins <= 1) return res.status(400).json({ error: 'No puedes eliminar el único administrador' });
   }
-  await db.collection('usuarios').deleteOne({ _id: new ObjectId(req.params.id) });
+  await db.collection('usuarios').deleteOne({ _id: ObjectId.createFromHexString(req.params.id) });
   res.json({ ok: true });
 }));
 
@@ -381,6 +382,35 @@ app.get('/api/dashboard', wrap(async (_req, res) => {
     },
     mes: porDia,
   });
+}));
+
+// ── Inventariado ─────────────────────────────────────────────────
+app.post('/api/inventariado', wrap(async (req, res) => {
+  const { productoId, nombre, cantidad } = req.body;
+  if (!nombre || cantidad == null) return res.status(400).json({ error: 'Datos incompletos' });
+  const ahora = new Date();
+  const doc = {
+    productoId: productoId || null,
+    nombre,
+    cantidad: parseInt(cantidad),
+    fecha:    localDate(),
+    hora:     ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+    creadoEn: ahora,
+  };
+  await db.collection('inventariado').insertOne(doc);
+  if (productoId) {
+    await db.collection('productos').updateOne(
+      { _id: ObjectId.createFromHexString(productoId) },
+      { $set: { stock: parseInt(cantidad) } }
+    );
+  }
+  res.json(doc);
+}));
+
+app.get('/api/inventariado', wrap(async (req, res) => {
+  const fecha = req.query.fecha || localDate();
+  const logs  = await db.collection('inventariado').find({ fecha }).sort({ creadoEn: -1 }).toArray();
+  res.json(logs);
 }));
 
 // ── Versión ──────────────────────────────────────────────────────

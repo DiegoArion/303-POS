@@ -72,6 +72,7 @@
     <div class="nav-item" data-page="pedidos" data-roles="admin"><i class="fas fa-clipboard-list"></i> Pedidos</div>
 
     <div class="nav-label" data-roles="admin">Sistema</div>
+    <div class="nav-item" data-page="inventariado" data-roles="admin"><i class="fas fa-clipboard-check"></i> Inventariado</div>
     <div class="nav-item" data-page="usuarios" data-roles="admin"><i class="fas fa-users"></i> Usuarios</div>
     <div class="nav-item" data-page="config" data-roles="admin"><i class="fas fa-sliders"></i> Configuración</div>
   </nav>
@@ -682,6 +683,62 @@
       </div>
     </div>
 
+    <!-- ── INVENTARIADO ── -->
+    <div class="page" id="page-inventariado">
+
+      <!-- Scanner input -->
+      <div class="table-card inv-scanner-card">
+        <i class="fas fa-barcode" style="font-size:22px;color:var(--primary);flex-shrink:0;"></i>
+        <input id="inv-input" type="text" placeholder="Escanea o escribe el código de barras y presiona Enter…"
+          onkeydown="if(event.key==='Enter'){ handleInvScan(this.value.trim()); this.value=''; }">
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;align-items:start;">
+
+        <!-- Producto actual -->
+        <div class="table-card inv-actual-card" id="inv-actual-card">
+          <div id="inv-actual-empty" style="text-align:center;color:var(--muted);padding:40px 0;">
+            <i class="fas fa-barcode" style="font-size:40px;margin-bottom:12px;display:block;"></i>
+            Escanea un producto para comenzar
+          </div>
+          <div id="inv-actual-info" style="display:none;text-align:center;">
+            <div id="inv-actual-nombre" style="font-size:19px;font-weight:700;margin-bottom:4px;"></div>
+            <div id="inv-actual-codigo" style="font-size:13px;color:var(--muted);margin-bottom:24px;"></div>
+            <div id="inv-contador" class="inv-contador">0</div>
+            <div style="display:flex;gap:10px;justify-content:center;margin-top:24px;">
+              <button class="inv-btn-adj" onclick="invAjustar(-1)"><i class="fas fa-minus"></i></button>
+              <button class="btn-primary" style="flex:1;justify-content:center;" onclick="guardarInvActual(true)">
+                <i class="fas fa-check"></i> Guardar
+              </button>
+              <button class="inv-btn-adj" onclick="invAjustar(1)"><i class="fas fa-plus"></i></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Log de sesión -->
+        <div class="table-card" style="overflow:hidden;">
+          <div style="padding:14px 18px;border-bottom:1px solid var(--border);font-weight:700;font-size:15px;">
+            Registrados hoy
+          </div>
+          <div style="overflow-y:auto;max-height:420px;">
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="background:var(--bg);">
+                  <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Producto</th>
+                  <th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Cant.</th>
+                  <th style="padding:10px 14px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Hora</th>
+                </tr>
+              </thead>
+              <tbody id="inv-log-body">
+                <tr><td colspan="3" style="text-align:center;color:var(--muted);padding:24px;">Sin registros hoy</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
   </div><!-- /content -->
 </div><!-- /main -->
 
@@ -793,6 +850,49 @@
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
+
+<!-- MODAL INVENTARIADO — PRODUCTO NO ENCONTRADO -->
+<div class="granel-overlay" id="inv-new-overlay" onclick="if(event.target===this)closeInvNew()">
+  <div class="granel-modal" style="max-width:440px;">
+    <div class="granel-head">
+      <div class="granel-name">Producto no encontrado</div>
+      <button class="granel-close" onclick="closeInvNew()"><i class="fas fa-times"></i></button>
+    </div>
+    <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
+      <div style="font-size:13px;color:var(--muted);">Código escaneado: <strong id="inv-new-codigo"></strong></div>
+      <div class="field">
+        <label>Nombre del producto <span style="color:var(--danger)">*</span></label>
+        <input id="inv-new-nombre" type="text" placeholder="Ej: Coca Cola 600ml">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="field">
+          <label>Precio venta <span style="color:var(--danger)">*</span></label>
+          <input id="inv-new-pventa" type="number" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="field">
+          <label>Precio costo</label>
+          <input id="inv-new-pcosto" type="number" min="0" step="0.01" placeholder="0.00">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="field">
+          <label>Categoría</label>
+          <select id="inv-new-cat"></select>
+        </div>
+        <div class="field">
+          <label>Unidad</label>
+          <select id="inv-new-unidad"></select>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:4px;">
+        <button class="btn-secondary" style="flex:1;justify-content:center;" onclick="closeInvNew()">Cancelar</button>
+        <button class="btn-primary" style="flex:1;justify-content:center;" onclick="guardarInvNuevo()">
+          <i class="fas fa-plus"></i> Registrar y continuar
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL VERSIÓN -->
 <div class="granel-overlay" id="version-overlay" onclick="if(event.target===this)closeVersionModal()">

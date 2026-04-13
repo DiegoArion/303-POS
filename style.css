@@ -931,6 +931,30 @@
     }
     .btn-logout:hover { color: var(--danger); }
 
+    /* ── INVENTARIADO ── */
+    .inv-scanner-card {
+      display: flex; align-items: center; gap: 14px;
+      padding: 16px 20px; margin-bottom: 20px;
+    }
+    .inv-scanner-card input {
+      flex: 1; font-size: 16px; border: none; outline: none;
+      background: transparent; color: var(--text);
+    }
+    .inv-actual-card { padding: 28px; margin-bottom: 0; }
+    .inv-contador {
+      font-size: 96px; font-weight: 800;
+      color: var(--primary); line-height: 1;
+      font-variant-numeric: tabular-nums;
+    }
+    .inv-btn-adj {
+      width: 44px; height: 44px; border-radius: 50%;
+      border: 2px solid var(--border); background: var(--bg);
+      color: var(--text); font-size: 18px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: border-color .15s, background .15s;
+    }
+    .inv-btn-adj:hover { border-color: var(--primary); background: var(--primary-light); }
+
     /* SCROLLBAR */
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
