@@ -411,10 +411,75 @@ app.post('/api/inventariado', wrap(async (req, res) => {
   res.json(doc);
 }));
 
-app.get('/api/inventariado', wrap(async (req, res) => {
-  const fecha = req.query.fecha || localDate();
-  const logs  = await db.collection('inventariado').find({ fecha }).sort({ creadoEn: -1 }).toArray();
+app.get('/api/inventariado', wrap(async (_req, res) => {
+  const logs = await db.collection('inventariado').find({}).sort({ creadoEn: -1 }).toArray();
   res.json(logs);
+}));
+
+app.delete('/api/inventariado', wrap(async (_req, res) => {
+  await db.collection('inventariado').deleteMany({});
+  res.json({ ok: true });
+}));
+
+// ── Reportes de inventario ────────────────────────────────────────
+app.post('/api/inv-reportes', wrap(async (req, res) => {
+  const { tipo } = req.body;
+  const ahora    = new Date();
+
+  // Leer los registros del inventariado activo
+  const logs = await db.collection('inventariado').find({}).sort({ creadoEn: 1 }).toArray();
+  if (!logs.length) return res.status(400).json({ error: 'Sin productos' });
+
+  // Para inventario completo: calcular los productos no revisados
+  let pendientes = [];
+  if (tipo === 'completo') {
+    const scannedIds = logs.map(p => p.productoId).filter(Boolean);
+    const excluir    = scannedIds.map(id => ObjectId.createFromHexString(String(id)));
+    pendientes = await db.collection('productos')
+      .find(excluir.length ? { _id: { $nin: excluir } } : {})
+      .sort({ producto: 1 })
+      .toArray();
+  }
+
+  const valorTotal = logs.reduce((s, r) =>
+    r.variacion != null && r.pVenta != null ? s + r.variacion * r.pVenta : s, 0);
+
+  const doc = {
+    tipo:       tipo || 'parcial',
+    fecha:      localDate(),
+    hora:       ahora.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' }),
+    creadoEn:   ahora,
+    productos:  logs,
+    pendientes,
+    stats: {
+      inventariados:  logs.length,
+      sinInventariar: pendientes.length,
+      conVariacion:   logs.filter(p => p.variacion !== 0 && p.variacion != null).length,
+      faltantes:      logs.filter(p => p.variacion != null && p.variacion < 0).length,
+      valorTotal,
+    },
+  };
+
+  await db.collection('inv_reportes').insertOne(doc);
+  await db.collection('inventariado').deleteMany({});
+  res.json(doc);
+}));
+
+app.get('/api/inv-reportes', wrap(async (req, res) => {
+  const { mes } = req.query; // formato "2026-04"
+  const filtro  = mes ? { fecha: { $regex: `^${mes}` } } : {};
+  const lista   = await db.collection('inv_reportes').find(filtro, {
+    projection: { productos: 0, pendientes: 0 },
+  }).sort({ creadoEn: -1 }).toArray();
+  res.json(lista);
+}));
+
+app.get('/api/inv-reportes/:id', wrap(async (req, res) => {
+  const doc = await db.collection('inv_reportes').findOne({
+    _id: ObjectId.createFromHexString(req.params.id),
+  });
+  if (!doc) return res.status(404).json({ error: 'No encontrado' });
+  res.json(doc);
 }));
 
 // ── Versión ──────────────────────────────────────────────────────
