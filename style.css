@@ -955,7 +955,12 @@
       font-size: 88px; font-weight: 800;
       color: var(--primary); line-height: 1;
       font-variant-numeric: tabular-nums;
+      width: 100%; text-align: center;
+      border: none; outline: none; background: transparent;
+      -moz-appearance: textfield;
     }
+    .inv-contador::-webkit-inner-spin-button,
+    .inv-contador::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
     .inv-btn-adj {
       width: 42px; height: 42px; border-radius: 50%;
       border: 2px solid var(--border); background: var(--bg);

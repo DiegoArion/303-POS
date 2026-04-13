@@ -69,6 +69,7 @@ const PAGE_META = {
   'caja-mov':     { title:'Mov. de Caja',    sub:'Registra entradas y salidas de efectivo' },
   'caja-reporte': { title:'Reporte de Caja', sub:'Movimientos de caja por día' },
   inventariado:   { title:'Inventariado',    sub:'Escanea productos para actualizar el stock' },
+  'inv-reporte':  { title:'Inventarios',     sub:'Historial de inventarios por fecha' },
 };
 
 document.querySelectorAll('.nav-item').forEach(el => {
@@ -91,6 +92,7 @@ document.querySelectorAll('.nav-item').forEach(el => {
     if (page === 'caja-mov')     initCajaMov();
     if (page === 'caja-reporte') initCajaReporte();
     if (page === 'inventariado') initInventariado();
+    if (page === 'inv-reporte')  { document.getElementById('inv-rep-fecha').value = new Date().toISOString().slice(0,10); loadInvReporte(); }
   });
 });
 
@@ -1232,7 +1234,7 @@ function renderInvActual() {
   document.getElementById('inv-actual-prov').textContent   = _invActual.proveedor ? `Proveedor: ${_invActual.proveedor}` : '';
   document.getElementById('inv-actual-precio').textContent = _invActual.pVenta != null ? `Precio: ${fmt(_invActual.pVenta)}` : '';
   document.getElementById('inv-stock-anterior').textContent = _invActual.stockAnterior ?? '—';
-  document.getElementById('inv-contador').textContent      = _invCantidad;
+  document.getElementById('inv-contador').value            = _invCantidad;
 }
 
 async function handleInvScan(codigo) {
@@ -1273,17 +1275,20 @@ async function handleInvScan(codigo) {
 async function confirmarStockActual() {
   if (!_invActual) return;
   _invCantidad = _invActual.stockAnterior ?? 0;
+  document.getElementById('inv-contador').value = _invCantidad;
   await guardarInvActual(true);
 }
 
 function invAjustar(delta) {
   if (!_invActual) return;
   _invCantidad = Math.max(0, _invCantidad + delta);
-  renderInvActual();
+  document.getElementById('inv-contador').value = _invCantidad;
 }
 
 async function guardarInvActual(manual = false) {
   if (!_invActual) return;
+  // sync from input in case user typed directly
+  _invCantidad = Math.max(0, parseInt(document.getElementById('inv-contador').value) || 0);
   try {
     await apiFetch('/inventariado', {
       method: 'POST',
@@ -1368,12 +1373,77 @@ async function terminarInventario() {
   if (!logs.length && _invPendientes.length === 0) { toast('⚠️ No hay registros en esta sesión'); return; }
 
   const stat = (label, value, color = 'var(--text)') => `
-    <div class="table-card" style="padding:14px;text-align:center;">
+    <div class="table-card" style="padding:16px;text-align:center;">
       <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">${label}</div>
-      <div style="font-size:20px;font-weight:800;color:${color};">${value}</div>
+      <div style="font-size:22px;font-weight:800;color:${color};">${value}</div>
     </div>`;
 
-  const filaInventariada = r => {
+  const faltantes  = logs.filter(r => r.variacion != null && r.variacion < 0);
+  const valorTotal = logs.reduce((s, r) => r.variacion != null && r.pVenta != null ? s + r.variacion * r.pVenta : s, 0);
+
+  if (_invTipo === 'parcial') {
+    const conVar = logs.filter(r => r.variacion !== 0 && r.variacion != null);
+    document.getElementById('inv-reporte-resumen').innerHTML =
+      stat('Inventariados', logs.length) +
+      stat('Con variación', conVar.length, conVar.length ? '#f59e0b' : 'var(--muted)') +
+      stat('Faltantes', faltantes.length, faltantes.length ? 'var(--danger)' : 'var(--muted)') +
+      stat('Impacto económico', (valorTotal >= 0 ? '+' : '') + fmt(valorTotal), valorTotal < 0 ? 'var(--danger)' : valorTotal > 0 ? 'var(--success)' : 'var(--muted)');
+  } else {
+    const noInv = _invPendientes.length;
+    const totalProductos = logs.length + noInv;
+    document.getElementById('inv-reporte-resumen').innerHTML =
+      stat('Total catálogo', totalProductos) +
+      stat('Inventariados', logs.length, 'var(--success)') +
+      stat('Sin inventariar', noInv, noInv ? 'var(--danger)' : 'var(--muted)') +
+      stat('Impacto económico', (valorTotal >= 0 ? '+' : '') + fmt(valorTotal), valorTotal < 0 ? 'var(--danger)' : valorTotal > 0 ? 'var(--success)' : 'var(--muted)');
+  }
+
+  document.getElementById('inv-reporte-overlay').classList.add('open');
+}
+
+function closeInvReporte() {
+  document.getElementById('inv-reporte-overlay').classList.remove('open');
+}
+
+// Navega programáticamente a una página del sidebar
+function navTo(page) {
+  const item = document.querySelector(`.nav-item[data-page="${page}"]`);
+  if (item) item.click();
+}
+
+async function loadInvReporte() {
+  const fechaEl = document.getElementById('inv-rep-fecha');
+  const fecha   = fechaEl?.value || new Date().toISOString().slice(0, 10);
+
+  const logs  = await apiFetch(`/inventariado?fecha=${fecha}`).catch(() => []);
+  const stats = document.getElementById('inv-rep-stats');
+  const tbody = document.getElementById('inv-rep-body');
+  const empty = document.getElementById('inv-rep-empty');
+
+  const stat = (label, value, color = 'var(--text)') => `
+    <div class="table-card" style="padding:20px;text-align:center;">
+      <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">${label}</div>
+      <div style="font-size:24px;font-weight:700;color:${color};">${value}</div>
+    </div>`;
+
+  if (!logs.length) {
+    stats.innerHTML = '';
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  const faltantes  = logs.filter(r => r.variacion != null && r.variacion < 0);
+  const conVar     = logs.filter(r => r.variacion !== 0 && r.variacion != null);
+  const valorTotal = logs.reduce((s, r) => r.variacion != null && r.pVenta != null ? s + r.variacion * r.pVenta : s, 0);
+  stats.innerHTML =
+    stat('Inventariados', logs.length) +
+    stat('Con variación', conVar.length, conVar.length ? '#f59e0b' : 'var(--muted)') +
+    stat('Faltantes', faltantes.length, faltantes.length ? 'var(--danger)' : 'var(--muted)') +
+    stat('Impacto económico', (valorTotal >= 0 ? '+' : '') + fmt(valorTotal), valorTotal < 0 ? 'var(--danger)' : valorTotal > 0 ? 'var(--success)' : 'var(--muted)');
+
+  tbody.innerHTML = logs.map(r => {
     const v      = r.variacion;
     const vStr   = v == null ? '—' : (v > 0 ? `+${v}` : `${v}`);
     const vColor = v == null ? '' : v > 0 ? 'color:var(--success);' : v < 0 ? 'color:var(--danger);' : '';
@@ -1390,54 +1460,7 @@ async function terminarInventario() {
         <td style="padding:9px 12px;text-align:center;font-weight:700;${vColor}">${vStr}</td>
         <td style="padding:9px 12px;text-align:right;font-weight:700;${mColor}">${vMoney}</td>
       </tr>`;
-  };
-
-  const faltantes   = logs.filter(r => r.variacion != null && r.variacion < 0);
-  const valorTotal  = logs.reduce((s, r) => r.variacion != null && r.pVenta != null ? s + r.variacion * r.pVenta : s, 0);
-
-  if (_invTipo === 'parcial') {
-    const conVar = logs.filter(r => r.variacion !== 0 && r.variacion != null);
-    document.getElementById('inv-reporte-resumen').innerHTML =
-      stat('Inventariados', logs.length) +
-      stat('Con variación', conVar.length, conVar.length ? '#f59e0b' : 'var(--muted)') +
-      stat('Faltantes', faltantes.length, faltantes.length ? 'var(--danger)' : 'var(--muted)') +
-      stat('Impacto económico', (valorTotal >= 0 ? '+' : '') + fmt(valorTotal), valorTotal < 0 ? 'var(--danger)' : valorTotal > 0 ? 'var(--success)' : 'var(--muted)');
-
-    document.getElementById('inv-reporte-body').innerHTML = logs.map(filaInventariada).join('');
-
-  } else {
-    // Inventario completo — incluir los no inventariados
-    const noInv = _invPendientes.length;
-    const totalProductos = logs.length + noInv;
-    document.getElementById('inv-reporte-resumen').innerHTML =
-      stat('Total catálogo', totalProductos) +
-      stat('Inventariados', logs.length, 'var(--success)') +
-      stat('Sin inventariar', noInv, noInv ? 'var(--danger)' : 'var(--muted)') +
-      stat('Impacto económico', (valorTotal >= 0 ? '+' : '') + fmt(valorTotal), valorTotal < 0 ? 'var(--danger)' : valorTotal > 0 ? 'var(--success)' : 'var(--muted)');
-
-    const filasInv = logs.map(filaInventariada).join('');
-    const filasNoInv = _invPendientes.map(p => `
-      <tr style="border-bottom:1px solid var(--border);opacity:.65;">
-        <td style="padding:9px 12px;font-size:13px;">${p.producto}</td>
-        <td style="padding:9px 12px;color:var(--muted);font-size:13px;">${p.proveedor || '—'}</td>
-        <td style="padding:9px 12px;text-align:right;font-size:13px;">${p.pVenta != null ? fmt(p.pVenta) : '—'}</td>
-        <td style="padding:9px 12px;text-align:center;color:var(--muted);">${p.stock ?? 0}</td>
-        <td style="padding:9px 12px;text-align:center;color:var(--muted);">—</td>
-        <td colspan="2" style="padding:9px 12px;text-align:center;">
-          <span style="background:#fef2f2;color:var(--danger);font-size:11px;font-weight:600;padding:3px 8px;border-radius:4px;">Sin inventariar</span>
-        </td>
-      </tr>`).join('');
-
-    document.getElementById('inv-reporte-body').innerHTML =
-      (filasInv ? `<tr><td colspan="7" style="padding:8px 12px;background:var(--success-bg);font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:.5px;">Inventariados (${logs.length})</td></tr>${filasInv}` : '') +
-      (filasNoInv ? `<tr><td colspan="7" style="padding:8px 12px;background:#fef2f2;font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:.5px;">Sin inventariar (${noInv})</td></tr>${filasNoInv}` : '');
-  }
-
-  document.getElementById('inv-reporte-overlay').classList.add('open');
-}
-
-function closeInvReporte() {
-  document.getElementById('inv-reporte-overlay').classList.remove('open');
+  }).join('');
 }
 
 function openInvNew(codigo) {

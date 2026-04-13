@@ -70,6 +70,7 @@
     <div class="nav-item" data-page="ventas" data-roles="admin"><i class="fas fa-receipt"></i> Ventas</div>
     <div class="nav-item" data-page="caja-reporte" data-roles="admin"><i class="fas fa-money-bill-wave"></i> Caja</div>
     <div class="nav-item" data-page="pedidos" data-roles="admin"><i class="fas fa-clipboard-list"></i> Pedidos</div>
+    <div class="nav-item" data-page="inv-reporte" data-roles="admin"><i class="fas fa-boxes"></i> Inventarios</div>
 
     <div class="nav-label" data-roles="admin">Sistema</div>
     <div class="nav-item" data-page="inventariado" data-roles="admin"><i class="fas fa-clipboard-check"></i> Inventariado</div>
@@ -683,6 +684,38 @@
       </div>
     </div>
 
+    <!-- ── REPORTE DE INVENTARIOS ── -->
+    <div class="page" id="page-inv-reporte">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:22px;flex-wrap:wrap;">
+        <div style="font-size:17px;font-weight:700;flex:1;">
+          <i class="fas fa-boxes" style="color:var(--primary);margin-right:8px;"></i>Reporte de Inventarios
+        </div>
+        <input type="date" id="inv-rep-fecha"
+          style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--card);"
+          onchange="loadInvReporte()">
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:24px;" id="inv-rep-stats"></div>
+      <div class="table-card" style="overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="background:var(--bg);">
+              <th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Producto</th>
+              <th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Proveedor</th>
+              <th style="padding:10px 12px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">P. Unit.</th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Ant.</th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Nuevo</th>
+              <th style="padding:10px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Variación</th>
+              <th style="padding:10px 12px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Valor $</th>
+            </tr>
+          </thead>
+          <tbody id="inv-rep-body"></tbody>
+        </table>
+        <div id="inv-rep-empty" style="padding:40px;text-align:center;color:var(--muted);display:none;">
+          Sin registros de inventario este día
+        </div>
+      </div>
+    </div>
+
     <!-- ── INVENTARIADO ── -->
     <div class="page" id="page-inventariado">
 
@@ -754,7 +787,7 @@
               </div>
               <div style="text-align:center;">
                 <div style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">O ingresa la cantidad real</div>
-                <div id="inv-contador" class="inv-contador">0</div>
+                <input id="inv-contador" class="inv-contador" type="number" min="0" value="0" oninput="_invCantidad=Math.max(0,parseInt(this.value)||0);this.value=_invCantidad;">
                 <div style="display:flex;gap:8px;justify-content:center;margin-top:14px;">
                   <button class="inv-btn-adj" onclick="invAjustar(-1)"><i class="fas fa-minus"></i></button>
                   <button class="btn-primary" style="flex:1;justify-content:center;" onclick="guardarInvActual(true)">
@@ -936,28 +969,18 @@
 
 <!-- MODAL REPORTE INVENTARIO -->
 <div class="granel-overlay" id="inv-reporte-overlay" onclick="if(event.target===this)closeInvReporte()">
-  <div class="granel-modal" style="max-width:780px;width:95vw;">
+  <div class="granel-modal" style="max-width:500px;width:95vw;">
     <div class="granel-head">
-      <div class="granel-name">Reporte de inventario</div>
+      <div class="granel-name">Inventario finalizado</div>
       <button class="granel-close" onclick="closeInvReporte()"><i class="fas fa-times"></i></button>
     </div>
     <div style="padding:20px;">
-      <div id="inv-reporte-resumen" style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;"></div>
-      <div style="overflow-x:auto;">
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead>
-            <tr style="background:var(--bg);">
-              <th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Producto</th>
-              <th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Proveedor</th>
-              <th style="padding:10px 12px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">P. Unit.</th>
-              <th style="padding:10px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Ant.</th>
-              <th style="padding:10px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Nuevo</th>
-              <th style="padding:10px 12px;text-align:center;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Variación</th>
-              <th style="padding:10px 12px;text-align:right;font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;">Valor $</th>
-            </tr>
-          </thead>
-          <tbody id="inv-reporte-body"></tbody>
-        </table>
+      <div id="inv-reporte-resumen" style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px;"></div>
+      <div style="display:flex;gap:10px;">
+        <button class="btn-secondary" style="flex:1;justify-content:center;" onclick="closeInvReporte()">Cerrar</button>
+        <button class="btn-primary" style="flex:1;justify-content:center;" onclick="closeInvReporte();navTo('inv-reporte')">
+          <i class="fas fa-chart-bar"></i> Ver reporte completo
+        </button>
       </div>
     </div>
   </div>
