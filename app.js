@@ -1070,6 +1070,12 @@ function authHeaders() {
   return token ? { 'Content-Type': 'application/json', 'x-token': token } : { 'Content-Type': 'application/json' };
 }
 
+async function apiFetch(path, opts = {}) {
+  const res = await fetch(`${API}${path}`, { ...opts, headers: { ...authHeaders(), ...opts.headers } });
+  if (!res.ok) throw new Error((await res.json()).error ?? res.statusText);
+  return res.json();
+}
+
 async function checkAuth() {
   const token = localStorage.getItem('pos_token');
   if (!token) { showLogin(); return; }
@@ -1168,7 +1174,7 @@ let _versionData = null;
 
 async function loadVersion() {
   try {
-    const data = await apiFetch('/api/version');
+    const data = await apiFetch('/version');
     _versionData = data;
     const pill = document.getElementById('version-pill');
     if (pill) pill.textContent = data.current ?? 'sin versión';
@@ -1208,7 +1214,7 @@ function closeVersionModal() {
 async function doRollback(version) {
   if (!confirm(`¿Cambiar a la versión ${version}? El servidor se reiniciará.`)) return;
   try {
-    await apiFetch('/api/version/rollback', {
+    await apiFetch('/version/rollback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ version }),
@@ -1751,7 +1757,7 @@ async function initCajaMov() {
 async function loadCajaHoy() {
   const fecha = new Date().toLocaleDateString('en-CA');
   try {
-    const data = await apiFetch(`/api/caja?fecha=${fecha}`);
+    const data = await apiFetch(`/caja?fecha=${fecha}`);
     const movs = data.movimientos || [];
     const balance = movs.reduce((s, m) => m.tipo === 'deposito' ? s + m.monto : s - m.monto, 0);
 
@@ -1782,7 +1788,7 @@ async function guardarMovCaja() {
   if (!monto || monto <= 0) { toast('⚠️ Ingresa un monto válido'); return; }
 
   try {
-    await apiFetch('/api/caja', {
+    await apiFetch('/caja', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ tipo: _cajaTipo, monto, concepto }),
@@ -1806,7 +1812,7 @@ async function loadCajaReporte() {
   const fecha = document.getElementById('caja-fecha').value;
   if (!fecha) return;
   try {
-    const data = await apiFetch(`/api/caja?fecha=${fecha}`);
+    const data = await apiFetch(`/caja?fecha=${fecha}`);
     const movs = data.movimientos || [];
     const depositos = movs.filter(m => m.tipo === 'deposito').reduce((s, m) => s + m.monto, 0);
     const retiros   = movs.filter(m => m.tipo === 'retiro').reduce((s, m)  => s + m.monto, 0);
