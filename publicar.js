@@ -48,15 +48,14 @@ async function main() {
   }
   ok('Sin cambios pendientes');
 
-  // 3. Verificar que test esté sincronizado con origin/test
+  // 3. Verificar que test no esté detrás de origin/test
   git('fetch origin');
-  const localTest  = git('rev-parse test');
-  const remoteTest = git('rev-parse origin/test');
-  if (localTest !== remoteTest) {
-    error('La rama test local no está sincronizada con origin/test. Haz push o pull primero.');
+  const detras = git('rev-list --count test..origin/test');
+  if (parseInt(detras) > 0) {
+    error('Hay cambios en origin/test que no tienes localmente. Haz git pull primero.');
     process.exit(1);
   }
-  ok('test sincronizado con origin');
+  ok('test al día con origin');
 
   // 4. Versión actual y siguiente
   let versionActual;
