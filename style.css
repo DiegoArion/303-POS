@@ -67,7 +67,10 @@
     .logo-name  { color: #fff; font-size: 19px; font-weight: 700; letter-spacing: -.4px; white-space: nowrap; }
     .logo-sub   { color: var(--sidebar-txt); font-size: 13px; margin-top: 1px; white-space: nowrap; }
 
-    .sidebar-nav { padding: 14px 10px; flex: 1; overflow: hidden; }
+    .sidebar-nav { padding: 14px 10px; flex: 1; overflow-y: auto; overflow-x: hidden; }
+    .sidebar-nav::-webkit-scrollbar { width: 4px; }
+    .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
+    .sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 2px; }
 
     .nav-label {
       color: #475569;
