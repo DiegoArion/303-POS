@@ -7,9 +7,7 @@ const { MongoClient, ObjectId } = require('mongodb');
 
 // ── Config ───────────────────────────────────────────────────────
 const IS_PROD   = process.env.DB_MODE === 'prod';
-const MONGO_URI = IS_PROD
-  ? 'mongodb://Pos_db_user:DiIXdP9KWJzBARDS@ac-eecvjbh-shard-00-00.grmlcs0.mongodb.net:27017,ac-eecvjbh-shard-00-01.grmlcs0.mongodb.net:27017,ac-eecvjbh-shard-00-02.grmlcs0.mongodb.net:27017/?ssl=true&replicaSet=atlas-hf2nd7-shard-0&authSource=admin&appName=Lena'
-  : 'mongodb://localhost:27017';
+const MONGO_URI = 'mongodb://localhost:27017';
 const DB_NAME   = IS_PROD ? 'pos_prod' : 'pos';
 const PORT      = 3000;
 
