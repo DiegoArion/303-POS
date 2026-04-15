@@ -40,6 +40,7 @@ function actualizar() {
   try {
     log('🔄 Aplicando actualización...');
     execSync('git pull origin PROD', { cwd: __dirname });
+    execSync('git fetch --tags',     { cwd: __dirname });
 
     // reinstalar deps si cambió package.json
     try {
