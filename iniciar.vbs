@@ -24,8 +24,18 @@ shell.Run "cmd /c cd /d """ & ruta & """ && node updater.js > """ & ruta & "\ser
 ' Iniciar sync con Atlas en segundo plano (sin ventana)
 shell.Run "cmd /c cd /d """ & ruta & """ && node sync.js > """ & ruta & "\sync.log"" 2>&1", 0, False
 
-' Esperar 2 segundos a que arranque
-WScript.Sleep 2000
+' Esperar a que el servidor responda (máximo 30 segundos)
+Dim ps, listo, intentos
+intentos = 0
+listo = False
+
+Do While Not listo And intentos < 30
+  WScript.Sleep 1000
+  intentos = intentos + 1
+  Set ps = shell.Exec("powershell -Command ""try { Invoke-WebRequest http://localhost:3000 -UseBasicParsing -TimeoutSec 1 | Out-Null; exit 0 } catch { exit 1 }""")
+  ps.StdOut.ReadAll()
+  If ps.ExitCode = 0 Then listo = True
+Loop
 
 ' Abrir el POS en el navegador
 shell.Run "http://localhost:3000"
