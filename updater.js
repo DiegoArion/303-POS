@@ -27,7 +27,7 @@ function iniciarServidor() {
 
 function hayActualizacion() {
   try {
-    execSync('git fetch origin PROD', { cwd: __dirname, timeout: 10000 });
+    execSync('git fetch origin PROD --tags', { cwd: __dirname, timeout: 10000 });
     const local  = execSync('git rev-parse HEAD',        { cwd: __dirname }).toString().trim();
     const remote = execSync('git rev-parse origin/PROD', { cwd: __dirname }).toString().trim();
     return local !== remote;
@@ -39,8 +39,7 @@ function hayActualizacion() {
 function actualizar() {
   try {
     log('🔄 Aplicando actualización...');
-    execSync('git pull origin PROD', { cwd: __dirname });
-    execSync('git fetch --tags',     { cwd: __dirname });
+    execSync('git pull origin PROD --tags', { cwd: __dirname });
 
     // reinstalar deps si cambió package.json
     try {
