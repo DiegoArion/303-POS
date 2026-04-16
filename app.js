@@ -405,10 +405,10 @@ ${notaHtml}
   win.document.write(html);
   win.document.close();
   win.focus();
-  setTimeout(() => {
-    win.print();
-    win.onafterprint = () => win.close();
-  }, 250);
+  // setTimeout(() => {
+  //   win.print();
+  //   win.onafterprint = () => win.close();
+  // }, 250);
 }
 
 async function processSale() {
@@ -667,10 +667,10 @@ tr.low td{font-weight:600;}
   win.document.write(html);
   win.document.close();
   win.focus();
-  // setTimeout(() => {
-  //   win.print();
-  //   win.onafterprint = () => win.close();
-  // }, 250);
+  setTimeout(() => {
+    win.print();
+    win.onafterprint = () => win.close();
+  }, 250);
 }
 
 /* ─── MODAL PRODUCTO ─── */
@@ -2587,6 +2587,8 @@ async function initCajaReporte() {
   await loadCajaReporte();
 }
 
+let _cajaReporteData = null; // cache para imprimir sin refetch
+
 async function loadCajaReporte() {
   const fecha = document.getElementById('caja-fecha').value;
   if (!fecha) return;
@@ -2597,6 +2599,7 @@ async function loadCajaReporte() {
     const retiros       = movimientos.filter(m => m.tipo === 'retiro').reduce((s, m)  => s + m.monto, 0);
     const totalVentas   = ventas.reduce((s, v) => s + (v.total ?? 0), 0);
     const balance       = depositos - retiros + totalVentas;
+    _cajaReporteData    = { fecha, movimientos, ventas, depositos, retiros, totalVentas, balance };
 
     document.getElementById('cr-depositos').textContent = fmt(depositos);
     document.getElementById('cr-retiros').textContent   = fmt(retiros);
@@ -2646,4 +2649,77 @@ async function loadCajaReporte() {
   } catch (err) {
     toast(`❌ ${err.message}`);
   }
+}
+
+function imprimirCajaReporte() {
+  if (!_cajaReporteData) { toast('⚠️ Carga el reporte primero'); return; }
+  const { fecha, movimientos, ventas, depositos, retiros, totalVentas, balance } = _cajaReporteData;
+
+  const money = n => '$' + Number(n).toFixed(2);
+  const hora  = d => new Date(d).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  const fechaFmt = new Date(fecha + 'T12:00:00').toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  const filas = [
+    ...movimientos.map(m => ({ _t: new Date(m.creadoEn), tipo: 'mov', data: m })),
+    ...ventas.map(v      => ({ _t: new Date(v.fecha),    tipo: 'venta', data: v })),
+  ].sort((a, b) => a._t - b._t).map(({ tipo, data }) => {
+    if (tipo === 'mov') {
+      const signo = data.tipo === 'deposito' ? '+' : '-';
+      const label = data.tipo === 'deposito' ? 'DEP' : 'RET';
+      return `<tr>
+        <td>${hora(data.creadoEn)}</td>
+        <td>${label}</td>
+        <td>${data.concepto || '—'}</td>
+        <td class="num">${signo}${money(data.monto)}</td>
+      </tr>`;
+    } else {
+      return `<tr>
+        <td>${hora(data.fecha)}</td>
+        <td>VTA</td>
+        <td>${data.folio || '—'}</td>
+        <td class="num">+${money(data.total)}</td>
+      </tr>`;
+    }
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Caja ${fechaFmt}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+@page{size:58mm auto;margin:2mm 3mm;}
+body{font-family:'Courier New',Courier,monospace;font-size:7.5pt;width:52mm;color:#000;}
+.c{text-align:center;}
+.dash{border:none;border-top:1px dashed #000;margin:3px 0;}
+.solid{border:none;border-top:1.5px solid #000;margin:3px 0;}
+table{width:100%;border-collapse:collapse;}
+th{font-size:6.5pt;text-transform:uppercase;border-bottom:1px solid #000;padding:2px 1px;text-align:left;}
+td{padding:2px 1px;font-size:7pt;}
+.num{text-align:right;}
+.res{display:flex;justify-content:space-between;margin:1.5px 0;}
+.bold{font-weight:700;}
+</style></head><body>
+<div class="c bold" style="font-size:10pt;">REPORTE DE CAJA</div>
+<div class="c">${fechaFmt}</div>
+<hr class="solid">
+<table>
+  <thead><tr><th>Hora</th><th>Tipo</th><th>Concepto/Folio</th><th class="num">Monto</th></tr></thead>
+  <tbody>${filas || '<tr><td colspan="4" style="text-align:center;">Sin movimientos</td></tr>'}</tbody>
+</table>
+<hr class="solid">
+<div class="res"><span>Depósitos</span><span>+${money(depositos)}</span></div>
+<div class="res"><span>Retiros</span><span>-${money(retiros)}</span></div>
+<div class="res"><span>Ventas efectivo</span><span>+${money(totalVentas)}</span></div>
+<hr class="dash">
+<div class="res bold"><span>BALANCE EN CAJA</span><span>${money(balance)}</span></div>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=320,height=600,toolbar=0,scrollbars=0,status=0,menubar=0');
+  if (!win) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => {
+    win.print();
+    win.onafterprint = () => win.close();
+  }, 250);
 }

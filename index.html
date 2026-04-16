@@ -646,6 +646,10 @@
         <input type="date" id="caja-fecha"
           style="padding:8px 14px;border:1px solid var(--border);border-radius:var(--radius);font-size:14px;background:var(--card);"
           onchange="loadCajaReporte()">
+        <button onclick="imprimirCajaReporte()"
+          style="display:flex;align-items:center;gap:7px;padding:8px 14px;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">
+          <i class="fas fa-print"></i> Imprimir
+        </button>
       </div>
 
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:24px;">
