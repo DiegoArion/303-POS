@@ -143,11 +143,15 @@ app.delete('/api/productos/:id', wrap(async (req, res) => {
   const result = await db.collection('productos').deleteOne({ _id: oid });
   if (result.deletedCount === 0) return res.status(404).json({ error: 'Producto no encontrado' });
 
-  // Propagar eliminación a Atlas si está disponible
+  // Propagar eliminación a Atlas, o guardar como pendiente
   if (dbAtlas) {
-    dbAtlas.collection('productos').deleteOne({ _id: oid }).catch(() => {
-      console.log(`⚠️  No se pudo eliminar ${req.params.id} de Atlas — se eliminará en el próximo sync`);
-    });
+    try {
+      await dbAtlas.collection('productos').deleteOne({ _id: oid });
+    } catch {
+      await db.collection('_eliminaciones').insertOne({ coleccion: 'productos', docId: oid, deletedAt: new Date() });
+    }
+  } else if (IS_PROD) {
+    await db.collection('_eliminaciones').insertOne({ coleccion: 'productos', docId: oid, deletedAt: new Date() });
   }
 
   res.json({ ok: true });
@@ -189,7 +193,7 @@ app.put('/api/config/:tipo', wrap(async (req, res) => {
   if (!['categorias', 'proveedores', 'unidades'].includes(tipo))
     return res.status(400).json({ error: 'Tipo inválido' });
   const valores = (req.body.valores ?? []).map(v => String(v).trim()).filter(Boolean);
-  await db.collection('config').updateOne({ tipo }, { $set: { tipo, valores } }, { upsert: true });
+  await db.collection('config').updateOne({ tipo }, { $set: { tipo, valores, updatedAt: new Date() } }, { upsert: true });
   res.json({ tipo, valores });
 }));
 
@@ -358,6 +362,7 @@ app.patch('/api/usuarios/:id', wrap(async (req, res) => {
   if (tipo && ['admin', 'vendedor'].includes(tipo)) set.tipo = tipo;
   if (password?.trim()) set.password = hashPwd(password);
   if (!Object.keys(set).length) return res.status(400).json({ error: 'Sin cambios' });
+  set.actualizadoEn = new Date();
   await db.collection('usuarios').updateOne({ _id: ObjectId.createFromHexString(req.params.id) }, { $set: set });
   res.json({ ok: true });
 }));
