@@ -105,10 +105,34 @@ function fmt(n) {
 function stockColor(s)  { return s === 0 ? 'var(--danger)' : s <= 5 ? 'var(--warning)' : 'var(--success)'; }
 function stockLabel(s)  { return s === 0 ? 'Sin stock' : s <= 5 ? 'Poco stock' : s <= 10 ? 'Stock bajo' : 'En stock'; }
 
+// Muestra imagen del producto si existe, si no la inicial
+function _avatarFallback(img) {
+  if (img.dataset.tried === 'jpg') {
+    img.dataset.tried = 'png';
+    img.src = `/imagenes/${img.dataset.sku}.png`;
+  } else {
+    const { size, radius, ini } = img.dataset;
+    const fs = Math.round(Number(size) * 0.4);
+    const div = document.createElement('div');
+    div.style.cssText = `width:${size}px;height:${size}px;border-radius:${radius}px;background:var(--primary-light);color:var(--primary-dark);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${fs}px;flex-shrink:0;`;
+    div.textContent = ini;
+    img.replaceWith(div);
+  }
+}
+
+function avatarHtml(sku, ini, size, radius) {
+  if (!sku) {
+    const fs = Math.round(size * 0.4);
+    return `<div style="width:${size}px;height:${size}px;border-radius:${radius}px;background:var(--primary-light);color:var(--primary-dark);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:${fs}px;flex-shrink:0;">${ini}</div>`;
+  }
+  return `<img src="/imagenes/${encodeURIComponent(sku)}.jpg" loading="lazy"
+    onerror="_avatarFallback(this)"
+    data-sku="${encodeURIComponent(sku)}" data-ini="${ini}" data-size="${size}" data-radius="${radius}" data-tried="jpg"
+    style="width:${size}px;height:${size}px;border-radius:${radius}px;object-fit:cover;flex-shrink:0;">`;
+}
+
 function avatar(p) {
-  return `<div style="width:36px;height:36px;border-radius:9px;background:var(--primary-light);
-    color:var(--primary-dark);display:flex;align-items:center;justify-content:center;
-    font-weight:700;font-size:15px;flex-shrink:0;">${p.ini}</div>`;
+  return avatarHtml(p.sku, p.ini, 36, 9);
 }
 
 function buildTabs(containerId, active, onClickFn) {
@@ -158,9 +182,7 @@ function renderSalesGrid(list) {
       : `onclick="addToCart('${p._id}')"`;
     return `
       <div class="prod-card${out ? ' out' : ''}" ${action}>
-        <div style="width:44px;height:44px;border-radius:10px;background:var(--primary-light);
-          color:var(--primary-dark);display:flex;align-items:center;justify-content:center;
-          font-weight:700;font-size:20px;">${p.ini}</div>
+        ${avatarHtml(p.sku, p.ini, 44, 10)}
         <div class="prod-name">${p.name}</div>
         <div class="prod-price">${fmt(p.price)}<span style="font-size:10px;font-weight:400;color:var(--muted);"> /kg</span></div>
         ${granel ? '<span class="granel-tag"><i class="fas fa-weight-hanging"></i> Granel</span>' : ''}
@@ -296,9 +318,7 @@ function renderCart() {
     }
     return `
       <div class="cart-item">
-        <div style="width:30px;height:30px;border-radius:7px;background:var(--primary-light);
-          color:var(--primary-dark);display:flex;align-items:center;justify-content:center;
-          font-weight:700;font-size:13px;flex-shrink:0;">${it.ini}</div>
+        ${avatarHtml(it.sku, it.ini, 30, 7)}
         <div class="ci-info">
           <div class="ci-name">${it.name}</div>
           <div class="ci-unit">${fmt(it.price)} c/u</div>
@@ -404,9 +424,7 @@ function renderProductsGrid(list) {
     const sb = p.stock===0?'var(--danger-bg)':p.stock<=5?'var(--warning-bg)':'var(--success-bg)';
     return `
       <div class="cat-card">
-        <div style="width:52px;height:52px;border-radius:12px;background:var(--primary-light);
-          color:var(--primary-dark);display:flex;align-items:center;justify-content:center;
-          font-weight:700;font-size:22px;margin-bottom:10px;">${p.ini}</div>
+        ${avatarHtml(p.sku, p.ini, 52, 12)}
         <div class="cat-name">${p.name}</div>
         <div class="cat-sku">${p.sku}</div>
         <span class="cat-tag">${p.cat}</span>
@@ -466,9 +484,7 @@ function renderInventoryTable(list) {
       <tr>
         <td>
           <div style="display:flex;align-items:center;gap:9px;">
-            <div style="width:32px;height:32px;border-radius:8px;background:var(--primary-light);
-              color:var(--primary-dark);display:flex;align-items:center;justify-content:center;
-              font-weight:700;font-size:14px;flex-shrink:0;">${p.ini}</div>
+            ${avatarHtml(p.sku, p.ini, 32, 8)}
             <span style="font-weight:500;">${p.name}</span>
           </div>
         </td>
