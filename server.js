@@ -3,8 +3,12 @@ const cors               = require('cors');
 const path               = require('path');
 const crypto             = require('crypto');
 const https              = require('https');
+const fs                 = require('fs');
 const { execSync }       = require('child_process');
 const { MongoClient, ObjectId } = require('mongodb');
+
+const IMAGENES_DIR = path.join(__dirname, 'imagenes');
+if (!fs.existsSync(IMAGENES_DIR)) fs.mkdirSync(IMAGENES_DIR);
 
 // ── Config ───────────────────────────────────────────────────────
 const IS_PROD   = process.env.DB_MODE === 'prod';
@@ -21,21 +25,19 @@ const localDate = () => new Date().toLocaleDateString('en-CA');
 const wrap = fn => (req, res) => fn(req, res).catch(err => res.status(500).json({ error: err.message }));
 
 // Construye el documento de producto normalizado
-function buildProductDoc({ codigo, producto, pCosto, pVenta, stock, categoria, proveedor, unidad, imagen }) {
+function buildProductDoc({ codigo, producto, pCosto, pVenta, stock, categoria, proveedor, unidad }) {
   const parseNum = (v, fn) => v !== undefined && v !== '' && v != null ? fn(Number(v)) : null;
-  const doc = {
-    codigo:       (codigo    ?? '').trim(),
-    producto:     producto.trim(),
-    pCosto:       parseNum(pCosto,  n => round2(n)),
-    pVenta:       parseNum(pVenta,  n => round2(n)),
-    stock:        parseNum(stock,   n => parseInt(n)) ?? 0,
-    categoria:    (categoria ?? '').trim(),
-    proveedor:    (proveedor ?? '').trim(),
-    unidad:       (unidad    ?? '').trim(),
+  return {
+    codigo:        (codigo    ?? '').trim(),
+    producto:      producto.trim(),
+    pCosto:        parseNum(pCosto,  n => round2(n)),
+    pVenta:        parseNum(pVenta,  n => round2(n)),
+    stock:         parseNum(stock,   n => parseInt(n)) ?? 0,
+    categoria:     (categoria ?? '').trim(),
+    proveedor:     (proveedor ?? '').trim(),
+    unidad:        (unidad    ?? '').trim(),
     actualizadoEn: new Date(),
   };
-  if (imagen !== undefined) doc.imagen = imagen || null;
-  return doc;
 }
 
 // Calcula ganancia de una venta
@@ -82,7 +84,7 @@ async function conectar() {
 // ── App ───────────────────────────────────────────────────────────
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '2mb' })); // base64 de uploads manuales (solo tránsito, no se guarda en DB)
 
 // ── Productos ────────────────────────────────────────────────────
 app.get('/api/productos', wrap(async (req, res) => {
@@ -583,23 +585,36 @@ app.get('/api/buscar-codigo/:codigo', wrap(async (req, res) => {
       return res.json({ encontrado: false });
     }
 
-    // Imagen: primer img apuntando a S3 de go-upc
+    // Imagen: primer img apuntando a S3 de go-upc → guardar en disco
     const imgMatch = html.match(/<img[^>]+src=["'](https:\/\/go-upc\.s3[^"']+)["']/i);
     const imgUrl   = imgMatch ? imgMatch[1] : null;
-
-    let imagen = null;
+    let tieneImagen = false;
     if (imgUrl) {
       try {
         const buf = await fetchBuffer(imgUrl);
-        const ext = imgUrl.endsWith('.png') ? 'png' : 'jpeg';
-        imagen = `data:image/${ext};base64,${buf.toString('base64')}`;
+        const ext = /\.png(\?|$)/i.test(imgUrl) ? 'png' : 'jpg';
+        fs.writeFileSync(path.join(IMAGENES_DIR, `${codigo}.${ext}`), buf);
+        tieneImagen = true;
       } catch { /* sin imagen */ }
     }
 
-    res.json({ encontrado: true, nombre, imagen });
+    res.json({ encontrado: true, nombre, tieneImagen });
   } catch {
     res.json({ encontrado: false });
   }
+}));
+
+// ── Upload de imagen manual ───────────────────────────────────────
+app.post('/api/imagenes', wrap(async (req, res) => {
+  const { codigo, base64 } = req.body;
+  if (!codigo || !base64) return res.status(400).json({ error: 'Faltan datos' });
+  const match = base64.match(/^data:image\/(jpeg|jpg|png|webp|gif);base64,(.+)$/);
+  if (!match) return res.status(400).json({ error: 'Formato inválido' });
+  const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
+  const buf = Buffer.from(match[2], 'base64');
+  const filename = `${codigo}.${ext}`;
+  fs.writeFileSync(path.join(IMAGENES_DIR, filename), buf);
+  res.json({ ok: true, url: `/imagenes/${filename}` });
 }));
 
 // ── Versión ──────────────────────────────────────────────────────

@@ -525,17 +525,40 @@ function fImgOcultar() {
   document.getElementById('f-img-preview').src = '';
   document.getElementById('f-img-preview').style.display = 'none';
   document.getElementById('f-img-empty').style.display = '';
-  document.getElementById('f-imagen').value = '';
   document.getElementById('btn-img-borrar').style.display = 'none';
 }
 
-function fImgUpload(input) {
+// Carga imagen desde disco — intenta .jpg, luego .png
+function fImgCargar(codigo) {
+  if (!codigo) { fImgOcultar(); return; }
+  const exts = ['jpg', 'png'];
+  let idx = 0;
+  const img = document.getElementById('f-img-preview');
+  function tryNext() {
+    if (idx >= exts.length) { fImgOcultar(); return; }
+    const url = `/imagenes/${encodeURIComponent(codigo)}.${exts[idx++]}`;
+    img.onerror = tryNext;
+    img.onload  = () => {
+      img.style.display = '';
+      document.getElementById('f-img-empty').style.display = 'none';
+      document.getElementById('btn-img-borrar').style.display = '';
+    };
+    img.src = url;
+  }
+  tryNext();
+}
+
+async function fImgUpload(input) {
   const file = input.files[0];
   if (!file) return;
+  const codigo = document.getElementById('f-codigo').value.trim();
+  if (!codigo) { toast('⚠️ Ingresa el código del producto antes de subir la imagen'); input.value = ''; return; }
   const reader = new FileReader();
-  reader.onload = e => {
-    document.getElementById('f-imagen').value = e.target.result;
-    fImgMostrar(e.target.result);
+  reader.onload = async e => {
+    try {
+      const data = await apiFetch('/imagenes', { method: 'POST', body: JSON.stringify({ codigo, base64: e.target.result }) });
+      fImgMostrar(data.url);
+    } catch (err) { toast(`❌ ${err.message}`); }
   };
   reader.readAsDataURL(file);
 }
@@ -586,10 +609,7 @@ async function buscarPorCodigoModal() {
     const data = await apiFetch(`/buscar-codigo/${encodeURIComponent(codigo)}`);
     if (data.encontrado) {
       document.getElementById('f-nombre').value = data.nombre || '';
-      if (data.imagen) {
-        document.getElementById('f-imagen').value = data.imagen;
-        fImgMostrar(data.imagen);
-      }
+      if (data.tieneImagen) fImgCargar(codigo);
       fCodigoStatus('check', 'Info obtenida de internet');
     } else {
       fCodigoStatus('triangle-exclamation', 'No encontrado en internet');
@@ -626,14 +646,13 @@ function openModal(id = null) {
     document.getElementById('f-costo').value     = p.retail ?? '';
     document.getElementById('f-venta').value     = p.price  ?? '';
     document.getElementById('f-stock').value     = p.stock  ?? 0;
-    if (p.imagen) { document.getElementById('f-imagen').value = p.imagen; fImgMostrar(p.imagen); }
+    if (p.sku) fImgCargar(p.sku);
   } else {
     document.getElementById('modal-title').textContent    = 'Agregar producto';
     document.getElementById('modal-sub').textContent      = 'Solo el nombre es obligatorio';
     document.getElementById('btn-submit-txt').textContent = 'Agregar';
     document.getElementById('prod-form').reset();
     document.getElementById('f-id').value    = '';
-    document.getElementById('f-imagen').value = '';
   }
 
   document.querySelectorAll('.field input').forEach(i => i.classList.remove('error'));
@@ -683,7 +702,6 @@ async function submitProducto(e) {
     pCosto:    document.getElementById('f-costo').value || null,
     pVenta:    document.getElementById('f-venta').value  || null,
     stock:     document.getElementById('f-stock').value  || 0,
-    imagen:    document.getElementById('f-imagen').value || null,
   };
 
   try {
@@ -909,7 +927,6 @@ async function bulkBuscarCodigo(rowId) {
     const data = await apiFetch(`/buscar-codigo/${encodeURIComponent(codigo)}`);
     if (data.encontrado) {
       nombreInput.value = data.nombre || '';
-      if (data.imagen) tr.dataset.imagen = data.imagen;
     }
   } catch { /* sin internet, ignorar */ }
   finally { if (spinner) spinner.style.display = 'none'; }
@@ -1018,7 +1035,6 @@ async function bulkSubmit() {
       pCosto:    get('pCosto') || null,
       pVenta:    get('pVenta') || null,
       stock:     get('stock')  || 0,
-      imagen:    tr.dataset.imagen || null,
     });
   }
 
@@ -1700,15 +1716,16 @@ function closeInvDetalle() {
   document.getElementById('inv-detalle-overlay').classList.remove('open');
 }
 
-let _invNuevaImagen = null;
-
-function invNewImgUpload(input) {
+async function invNewImgUpload(input) {
   const file = input.files[0];
   if (!file) return;
+  if (!_invCodigo) { toast('⚠️ Sin código de producto'); input.value = ''; return; }
   const reader = new FileReader();
-  reader.onload = e => {
-    _invNuevaImagen = e.target.result;
-    invNewMostrarImagen(_invNuevaImagen);
+  reader.onload = async e => {
+    try {
+      const data = await apiFetch('/imagenes', { method: 'POST', body: JSON.stringify({ codigo: _invCodigo, base64: e.target.result }) });
+      invNewMostrarImagen(data.url);
+    } catch (err) { toast(`❌ ${err.message}`); }
   };
   reader.readAsDataURL(file);
 }
@@ -1744,7 +1761,6 @@ function invNewOcultarStatus() {
 
 async function openInvNew(codigo) {
   _invCodigo      = codigo;
-  _invNuevaImagen = null;
   document.getElementById('inv-new-codigo').textContent   = codigo;
   document.getElementById('inv-new-nombre').value         = '';
   document.getElementById('inv-new-pventa').value         = '';
@@ -1759,9 +1775,9 @@ async function openInvNew(codigo) {
     const data = await apiFetch(`/buscar-codigo/${encodeURIComponent(codigo)}`);
     if (data.encontrado) {
       document.getElementById('inv-new-nombre').value = data.nombre || '';
-      if (data.imagen) {
-        _invNuevaImagen = data.imagen;
-        invNewMostrarImagen(data.imagen);
+      if (data.tieneImagen) {
+        const url = `/imagenes/${encodeURIComponent(codigo)}.jpg`;
+        invNewMostrarImagen(url);
       }
       invNewStatus('check', 'Información obtenida de internet');
     } else {
@@ -1791,7 +1807,7 @@ async function guardarInvNuevo() {
   try {
     const prod = await apiFetch('/productos', {
       method: 'POST',
-      body:   JSON.stringify({ codigo: _invCodigo, producto: nombre, pVenta, pCosto, categoria: cat, unidad, stock: 0, imagen: _invNuevaImagen }),
+      body:   JSON.stringify({ codigo: _invCodigo, producto: nombre, pVenta, pCosto, categoria: cat, unidad, stock: 0 }),
     });
     closeInvNew();
     toast('✅ Producto registrado');
