@@ -47,13 +47,28 @@ const calcGanancia = venta =>
 const sessions = new Map(); // token → { username, tipo, _id }
 
 // ── Conexión ─────────────────────────────────────────────────────
+const ATLAS_URI = 'mongodb://Pos_db_user:DiIXdP9KWJzBARDS@ac-eecvjbh-shard-00-00.grmlcs0.mongodb.net:27017,ac-eecvjbh-shard-00-01.grmlcs0.mongodb.net:27017,ac-eecvjbh-shard-00-02.grmlcs0.mongodb.net:27017/?ssl=true&replicaSet=atlas-hf2nd7-shard-0&authSource=admin&appName=Lena';
+
 let db;
+let dbAtlas = null; // cliente Atlas opcional — solo para propagar eliminaciones en prod
 const client = new MongoClient(MONGO_URI);
 
 async function conectar() {
   await client.connect();
   db = client.db(DB_NAME);
   console.log(`✅ MongoDB conectado — base: ${DB_NAME} (${IS_PROD ? 'PRODUCCIÓN · Atlas' : 'desarrollo · local'})`);
+
+  if (IS_PROD) {
+    try {
+      const atlasClient = new MongoClient(ATLAS_URI, { serverSelectionTimeoutMS: 8000 });
+      await atlasClient.connect();
+      dbAtlas = atlasClient.db('pos_prod');
+      console.log('✅ Atlas conectado — eliminaciones se propagarán a la nube');
+    } catch {
+      console.log('⚠️  Sin conexión a Atlas — eliminaciones solo locales hasta que haya internet');
+    }
+  }
+
   const existe = await db.collection('usuarios').countDocuments();
   if (existe === 0) {
     await db.collection('usuarios').insertMany([
@@ -120,6 +135,22 @@ app.put('/api/productos/:id', wrap(async (req, res) => {
   );
   if (result.matchedCount === 0) return res.status(404).json({ error: 'Producto no encontrado' });
   res.json({ _id: req.params.id, ...update });
+}));
+
+app.delete('/api/productos/:id', wrap(async (req, res) => {
+  const oid = ObjectId.createFromHexString(req.params.id);
+
+  const result = await db.collection('productos').deleteOne({ _id: oid });
+  if (result.deletedCount === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+
+  // Propagar eliminación a Atlas si está disponible
+  if (dbAtlas) {
+    dbAtlas.collection('productos').deleteOne({ _id: oid }).catch(() => {
+      console.log(`⚠️  No se pudo eliminar ${req.params.id} de Atlas — se eliminará en el próximo sync`);
+    });
+  }
+
+  res.json({ ok: true });
 }));
 
 app.post('/api/productos/bulk', wrap(async (req, res) => {

@@ -502,6 +502,12 @@ function renderInventoryTable(list) {
             title="Editar producto">
             <i class="fas fa-pen"></i>
           </button>
+          <button onclick="eliminarProducto('${p._id}','${p.name.replace(/'/g,"&#39;")}')"
+            style="border:none;background:var(--danger-bg);border-radius:6px;padding:4px 8px;
+            cursor:pointer;color:var(--danger);font-size:12px;transition:all .15s;"
+            title="Eliminar producto">
+            <i class="fas fa-trash"></i>
+          </button>
         </td>
       </tr>`;
   }).join('');
@@ -637,6 +643,15 @@ function openModal(id = null) {
 
 function closeModal() {
   document.getElementById('modal-overlay').classList.remove('open');
+}
+
+async function eliminarProducto(id, nombre) {
+  if (!confirm(`¿Eliminar "${nombre}"?\n\nEsta acción no se puede deshacer.`)) return;
+  try {
+    await apiFetch(`/productos/${id}`, { method: 'DELETE' });
+    toast(`🗑 "${nombre}" eliminado`);
+    await loadInventory();
+  } catch (err) { toast(`❌ ${err.message}`); }
 }
 
 function handleOverlayClick(e) {
