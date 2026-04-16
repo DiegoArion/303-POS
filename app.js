@@ -405,10 +405,10 @@ ${notaHtml}
   win.document.write(html);
   win.document.close();
   win.focus();
-  // setTimeout(() => {
-  //   win.print();
-  //   win.onafterprint = () => win.close();
-  // }, 250);
+  setTimeout(() => {
+    win.print();
+    win.onafterprint = () => win.close();
+  }, 250);
 }
 
 async function processSale() {
