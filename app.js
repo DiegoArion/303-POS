@@ -2414,37 +2414,8 @@ function setCajaTipo(tipo) {
   ret.style.color       = !isDeposito ? '#991b1b' : 'var(--muted)';
 }
 
-async function initCajaMov() {
+function initCajaMov() {
   setCajaTipo('deposito');
-  await loadCajaHoy();
-}
-
-async function loadCajaHoy() {
-  const fecha = new Date().toLocaleDateString('en-CA');
-  try {
-    const data = await apiFetch(`/caja?fecha=${fecha}`);
-    const movs = data.movimientos || [];
-    const balance = movs.reduce((s, m) => m.tipo === 'deposito' ? s + m.monto : s - m.monto, 0);
-
-    document.getElementById('caja-hoy-balance').textContent = fmt(balance);
-
-    const list = document.getElementById('caja-hoy-list');
-    if (!movs.length) {
-      list.innerHTML = `<div style="padding:20px;text-align:center;color:var(--muted);">Sin movimientos hoy</div>`;
-      return;
-    }
-    list.innerHTML = movs.map(m => `
-      <div style="display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--border);">
-        <span class="badge" style="background:${m.tipo === 'deposito' ? 'var(--success)' : 'var(--danger)'};">
-          ${m.tipo === 'deposito' ? 'Depósito' : 'Retiro'}
-        </span>
-        <span style="font-weight:700;min-width:80px;">${fmt(m.monto)}</span>
-        <span style="color:var(--muted);font-size:13px;flex:1;">${m.concepto || '—'}</span>
-        <span style="color:var(--muted);font-size:12px;">${m.hora || ''}</span>
-      </div>`).join('');
-  } catch (err) {
-    toast(`❌ ${err.message}`);
-  }
 }
 
 async function guardarMovCaja() {
@@ -2461,7 +2432,6 @@ async function guardarMovCaja() {
     document.getElementById('caja-monto').value    = '';
     document.getElementById('caja-concepto').value = '';
     toast(`✅ ${_cajaTipo === 'deposito' ? 'Depósito' : 'Retiro'} registrado`);
-    await loadCajaHoy();
   } catch (err) {
     toast(`❌ ${err.message}`);
   }
@@ -2477,8 +2447,7 @@ async function loadCajaReporte() {
   const fecha = document.getElementById('caja-fecha').value;
   if (!fecha) return;
   try {
-    const data = await apiFetch(`/caja?fecha=${fecha}`);
-    const movs = data.movimientos || [];
+    const movs = await apiFetch(`/caja?fecha=${fecha}`);
     const depositos = movs.filter(m => m.tipo === 'deposito').reduce((s, m) => s + m.monto, 0);
     const retiros   = movs.filter(m => m.tipo === 'retiro').reduce((s, m)  => s + m.monto, 0);
     const balance   = depositos - retiros;
