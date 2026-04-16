@@ -581,6 +581,12 @@ function renderInventoryTable(list) {
             title="Editar producto">
             <i class="fas fa-pen"></i>
           </button>
+          ${p.sku ? `<button onclick="imprimirEtiqueta('${p.sku}','${p.name.replace(/'/g,"&#39;").replace(/"/g,"&quot;")}')"
+            style="border:none;background:var(--bg);border-radius:6px;padding:4px 8px;
+            cursor:pointer;color:var(--muted);font-size:12px;transition:all .15s;"
+            title="Imprimir etiqueta">
+            <i class="fas fa-barcode"></i>
+          </button>` : ''}
           <button onclick="eliminarProducto('${p._id}','${p.name.replace(/'/g,"&#39;")}')"
             style="border:none;background:var(--danger-bg);border-radius:6px;padding:4px 8px;
             cursor:pointer;color:var(--danger);font-size:12px;transition:all .15s;"
@@ -671,6 +677,48 @@ tr.low td{font-weight:600;}
     win.print();
     win.onafterprint = () => win.close();
   }, 250);
+}
+
+function imprimirEtiqueta(sku, nombre) {
+  // Detectar formato: EAN-13 si son 13 dígitos, si no Code128
+  const formato = /^\d{13}$/.test(sku) ? 'EAN13' : 'CODE128';
+  const nombreCorto = nombre.length > 28 ? nombre.slice(0, 26) + '…' : nombre;
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Etiqueta ${sku}</title>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+@page{size:50mm 25mm;margin:0;}
+body{width:50mm;height:25mm;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;font-family:'Courier New',Courier,monospace;overflow:hidden;}
+.nombre{font-size:6.5pt;font-weight:700;text-align:center;max-width:48mm;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1mm;}
+svg{max-width:48mm;}
+</style></head><body>
+<div class="nombre">${nombreCorto}</div>
+<svg id="bc"></svg>
+<script>
+  JsBarcode('#bc','${sku}',{
+    format:'${formato}',
+    width:1.5,
+    height:28,
+    fontSize:8,
+    margin:0,
+    displayValue:true
+  });
+<\/script>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=300,height=200,toolbar=0,scrollbars=0,status=0,menubar=0');
+  if (!win) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => {
+    win.print();
+    win.onafterprint = () => win.close();
+  }, 500);
 }
 
 /* ─── MODAL PRODUCTO ─── */
