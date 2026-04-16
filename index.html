@@ -374,13 +374,13 @@
             <thead>
               <tr>
                 <th style="width:36px;">#</th>
+                <th style="min-width:140px;">Código / SKU</th>
                 <th style="min-width:220px;">Nombre *</th>
-                <th style="min-width:120px;">Código / SKU</th>
                 <th style="min-width:150px;">Categoría</th>
                 <th style="min-width:150px;">Proveedor</th>
                 <th style="min-width:110px;">Unidad</th>
                 <th style="min-width:110px;">P. Costo</th>
-                <th style="min-width:110px;">P. Venta *</th>
+                <th style="min-width:110px;">P. Venta</th>
                 <th style="min-width:90px;">Stock</th>
                 <th style="width:36px;"></th>
               </tr>
@@ -392,7 +392,7 @@
           <span style="font-size:12px;color:var(--muted);">
             <i class="fas fa-circle-info"></i>
             Presiona <kbd style="background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:11px;">Tab</kbd>
-            para moverte entre celdas · Los campos con * son obligatorios
+            para moverte entre celdas · Solo el nombre es obligatorio · El SKU busca info en internet automáticamente
           </span>
           <button class="btn-primary" id="btn-bulk-save" onclick="bulkSubmit()" style="padding:10px 24px;font-size:14px;">
             <i class="fas fa-cloud-arrow-up"></i>
@@ -937,49 +937,70 @@
 
     <form class="modal-body" id="prod-form" onsubmit="submitProducto(event)">
       <input type="hidden" id="f-id">
+      <input type="hidden" id="f-imagen">
+
+      <!-- Código SKU + status búsqueda -->
       <div class="field full">
-        <label>Nombre del producto *</label>
-        <input id="f-nombre" type="text" placeholder="Ej: Coca-Cola 600ml" autocomplete="off">
-        <span class="field-error">El nombre es obligatorio</span>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Código / SKU</label>
-          <input id="f-codigo" type="text" placeholder="Ej: BEB-001" autocomplete="off">
-          <span class="field-hint">Código de barras o referencia interna</span>
+        <label>Código / SKU</label>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <input id="f-codigo" type="text" placeholder="Ej: 7501234567890" autocomplete="off"
+            onblur="buscarPorCodigoModal()"
+            onkeydown="if(event.key==='Enter'){event.preventDefault();buscarPorCodigoModal();}">
+          <div id="f-codigo-status" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap;">
+            <i id="f-codigo-status-icon" class="fas fa-circle-notch fa-spin"></i>
+            <span id="f-codigo-status-txt"></span>
+          </div>
         </div>
+        <span class="field-hint">Código de barras — se buscará info en internet automáticamente</span>
+      </div>
+
+      <!-- Imagen + Nombre -->
+      <div style="display:flex;gap:14px;align-items:flex-start;">
+        <div id="f-img-wrap" class="inv-new-img-wrap" style="flex-shrink:0;">
+          <img id="f-img-preview" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;">
+          <div id="f-img-empty"><i class="fas fa-image"></i></div>
+          <label class="inv-new-img-btn" title="Subir imagen">
+            <i class="fas fa-camera"></i>
+            <input type="file" accept="image/*" style="display:none;" onchange="fImgUpload(this)">
+          </label>
+        </div>
+        <div class="field full" style="flex:1;min-width:0;">
+          <label>Nombre del producto *</label>
+          <input id="f-nombre" type="text" placeholder="Ej: Coca-Cola 600ml" autocomplete="off" style="width:100%;box-sizing:border-box;">
+          <span class="field-error">El nombre es obligatorio</span>
+        </div>
+      </div>
+
+      <div class="field-row">
         <div class="field">
           <label>Categoría</label>
           <select id="f-categoria"></select>
         </div>
-      </div>
-      <div class="field-row">
         <div class="field">
           <label>Proveedor</label>
           <select id="f-proveedor"></select>
         </div>
+      </div>
+      <div class="field-row">
         <div class="field">
           <label>Unidad</label>
           <select id="f-unidad"></select>
         </div>
-      </div>
-      <div class="field-row">
-        <div class="field">
-          <label>Precio Costo (retail)</label>
-          <input id="f-costo" type="number" min="0" step="0.01" placeholder="0.00">
-        </div>
-        <div class="field">
-          <label>Precio Venta *</label>
-          <input id="f-venta" type="number" min="0" step="0.01" placeholder="0.00">
-          <span class="field-error">Ingresa el precio de venta</span>
-        </div>
-      </div>
-      <div class="field-row">
         <div class="field">
           <label>Stock inicial</label>
           <input id="f-stock" type="number" min="0" step="1" placeholder="0">
         </div>
-        <div class="field" style="justify-content:flex-end;padding-bottom:2px;"><!-- spacer --></div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Precio Costo</label>
+          <input id="f-costo" type="number" min="0" step="0.01" placeholder="0.00">
+        </div>
+        <div class="field">
+          <label>Precio Venta</label>
+          <input id="f-venta" type="number" min="0" step="0.01" placeholder="N/A">
+          <span class="field-error">Ingresa el precio de venta</span>
+        </div>
       </div>
     </form>
 
@@ -1052,27 +1073,51 @@
 
 <!-- MODAL INVENTARIADO — PRODUCTO NO ENCONTRADO -->
 <div class="granel-overlay" id="inv-new-overlay" onclick="if(event.target===this)closeInvNew()">
-  <div class="granel-modal" style="max-width:440px;">
+  <div class="granel-modal" style="max-width:500px;width:min(500px,calc(100vw - 32px));">
     <div class="granel-head">
       <div class="granel-name">Producto no encontrado</div>
       <button class="granel-close" onclick="closeInvNew()"><i class="fas fa-times"></i></button>
     </div>
     <div style="padding:20px;display:flex;flex-direction:column;gap:14px;">
-      <div style="font-size:13px;color:var(--muted);">Código escaneado: <strong id="inv-new-codigo"></strong></div>
-      <div class="field">
-        <label>Nombre del producto <span style="color:var(--danger)">*</span></label>
-        <input id="inv-new-nombre" type="text" placeholder="Ej: Coca Cola 600ml">
+
+      <!-- Código + status internet -->
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;">
+        <span style="font-size:13px;color:var(--muted);">Código: <strong id="inv-new-codigo"></strong></span>
+        <div id="inv-new-status" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--muted);">
+          <i id="inv-new-status-icon" class="fas fa-circle-notch fa-spin"></i>
+          <span id="inv-new-status-txt">Buscando en internet…</span>
+        </div>
       </div>
+
+      <!-- Imagen + Nombre (fila) -->
+      <div style="display:flex;gap:14px;align-items:flex-start;">
+        <div id="inv-new-img-wrap" class="inv-new-img-wrap" style="flex-shrink:0;">
+          <img id="inv-new-img" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;">
+          <div id="inv-new-img-empty"><i class="fas fa-image"></i></div>
+          <label class="inv-new-img-btn" title="Subir imagen">
+            <i class="fas fa-camera"></i>
+            <input type="file" accept="image/*" style="display:none;" onchange="invNewImgUpload(this)">
+          </label>
+        </div>
+        <div class="field" style="flex:1;min-width:0;">
+          <label>Nombre del producto <span style="color:var(--danger)">*</span></label>
+          <input id="inv-new-nombre" type="text" placeholder="Ej: Coca Cola 600ml" style="width:100%;box-sizing:border-box;">
+        </div>
+      </div>
+
+      <!-- Precios -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="field">
-          <label>Precio venta <span style="color:var(--danger)">*</span></label>
-          <input id="inv-new-pventa" type="number" min="0" step="0.01" placeholder="0.00">
+          <label>Precio venta</label>
+          <input id="inv-new-pventa" type="number" min="0" step="0.01" placeholder="N/A">
         </div>
         <div class="field">
           <label>Precio costo</label>
           <input id="inv-new-pcosto" type="number" min="0" step="0.01" placeholder="0.00">
         </div>
       </div>
+
+      <!-- Categoría + Unidad -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
         <div class="field">
           <label>Categoría</label>
@@ -1083,12 +1128,15 @@
           <select id="inv-new-unidad"></select>
         </div>
       </div>
+
+      <!-- Botones -->
       <div style="display:flex;gap:10px;margin-top:4px;">
         <button class="btn-secondary" style="flex:1;justify-content:center;" onclick="closeInvNew()">Cancelar</button>
         <button class="btn-primary" style="flex:1;justify-content:center;" onclick="guardarInvNuevo()">
           <i class="fas fa-plus"></i> Registrar y continuar
         </button>
       </div>
+
     </div>
   </div>
 </div>

@@ -508,6 +508,64 @@ function renderInventoryTable(list) {
 }
 
 /* ─── MODAL PRODUCTO ─── */
+function fImgMostrar(src) {
+  document.getElementById('f-img-preview').src = src;
+  document.getElementById('f-img-preview').style.display = '';
+  document.getElementById('f-img-empty').style.display = 'none';
+}
+
+function fImgOcultar() {
+  document.getElementById('f-img-preview').src = '';
+  document.getElementById('f-img-preview').style.display = 'none';
+  document.getElementById('f-img-empty').style.display = '';
+  document.getElementById('f-imagen').value = '';
+}
+
+function fImgUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    document.getElementById('f-imagen').value = e.target.result;
+    fImgMostrar(e.target.result);
+  };
+  reader.readAsDataURL(file);
+}
+
+function fCodigoStatus(icono, texto, spinning = false) {
+  const wrap = document.getElementById('f-codigo-status');
+  const icon = document.getElementById('f-codigo-status-icon');
+  const txt  = document.getElementById('f-codigo-status-txt');
+  wrap.style.display = 'flex';
+  icon.className = `fas fa-${icono}${spinning ? ' fa-spin' : ''}`;
+  txt.textContent = texto;
+}
+
+async function buscarPorCodigoModal() {
+  const codigo = document.getElementById('f-codigo').value.trim();
+  if (!codigo) return;
+  // Solo buscar en modo nuevo y si nombre está vacío
+  if (document.getElementById('f-id').value) return;
+  if (document.getElementById('f-nombre').value.trim()) return;
+
+  fCodigoStatus('circle-notch', 'Buscando…', true);
+  try {
+    const data = await apiFetch(`/buscar-codigo/${encodeURIComponent(codigo)}`);
+    if (data.encontrado) {
+      document.getElementById('f-nombre').value = data.nombre || '';
+      if (data.imagen) {
+        document.getElementById('f-imagen').value = data.imagen;
+        fImgMostrar(data.imagen);
+      }
+      fCodigoStatus('check', 'Info obtenida de internet');
+    } else {
+      fCodigoStatus('triangle-exclamation', 'No encontrado en internet');
+    }
+  } catch {
+    document.getElementById('f-codigo-status').style.display = 'none';
+  }
+}
+
 function openModal(id = null) {
   const overlay = document.getElementById('modal-overlay');
 
@@ -516,8 +574,11 @@ function openModal(id = null) {
   document.getElementById('f-proveedor').innerHTML = provOptions();
   document.getElementById('f-unidad').innerHTML    = unidadOptions();
 
+  // Limpiar imagen y status
+  fImgOcultar();
+  document.getElementById('f-codigo-status').style.display = 'none';
+
   if (id) {
-    // Modo editar
     const p = window._invAll?.find(x => x._id === id);
     if (!p) return;
     document.getElementById('modal-title').textContent    = 'Editar producto';
@@ -532,19 +593,19 @@ function openModal(id = null) {
     document.getElementById('f-costo').value     = p.retail ?? '';
     document.getElementById('f-venta').value     = p.price  ?? '';
     document.getElementById('f-stock').value     = p.stock  ?? 0;
+    if (p.imagen) { document.getElementById('f-imagen').value = p.imagen; fImgMostrar(p.imagen); }
   } else {
-    // Modo nuevo
     document.getElementById('modal-title').textContent    = 'Agregar producto';
-    document.getElementById('modal-sub').textContent      = 'Los campos marcados con * son obligatorios';
+    document.getElementById('modal-sub').textContent      = 'Solo el nombre es obligatorio';
     document.getElementById('btn-submit-txt').textContent = 'Agregar';
     document.getElementById('prod-form').reset();
-    document.getElementById('f-id').value = '';
+    document.getElementById('f-id').value    = '';
+    document.getElementById('f-imagen').value = '';
   }
 
-  // Limpiar errores
   document.querySelectorAll('.field input').forEach(i => i.classList.remove('error'));
   overlay.classList.add('open');
-  setTimeout(() => document.getElementById('f-nombre').focus(), 220);
+  setTimeout(() => document.getElementById('f-codigo').focus(), 220);
 }
 
 function closeModal() {
@@ -562,16 +623,10 @@ document.addEventListener('keydown', e => {
 async function submitProducto(e) {
   e.preventDefault();
   const nombre = document.getElementById('f-nombre').value.trim();
-  const venta  = document.getElementById('f-venta').value.trim();
   const id     = document.getElementById('f-id').value;
 
-  // Validar
-  let valid = true;
   const nEl = document.getElementById('f-nombre');
-  const vEl = document.getElementById('f-venta');
-  if (!nombre) { nEl.classList.add('error'); valid = false; } else nEl.classList.remove('error');
-  if (!venta)  { vEl.classList.add('error'); valid = false; } else vEl.classList.remove('error');
-  if (!valid) return;
+  if (!nombre) { nEl.classList.add('error'); return; } else nEl.classList.remove('error');
 
   const btn = document.getElementById('btn-submit');
   btn.disabled = true;
@@ -583,9 +638,10 @@ async function submitProducto(e) {
     categoria: document.getElementById('f-categoria').value,
     proveedor: document.getElementById('f-proveedor').value,
     unidad:    document.getElementById('f-unidad').value,
-    pCosto:    document.getElementById('f-costo').value,
-    pVenta:    venta,
-    stock:     document.getElementById('f-stock').value || 0,
+    pCosto:    document.getElementById('f-costo').value || null,
+    pVenta:    document.getElementById('f-venta').value  || null,
+    stock:     document.getElementById('f-stock').value  || 0,
+    imagen:    document.getElementById('f-imagen').value || null,
   };
 
   try {
@@ -796,6 +852,26 @@ function getFirstRowValues() {
   };
 }
 
+async function bulkBuscarCodigo(rowId) {
+  const tr = document.getElementById(rowId);
+  if (!tr) return;
+  const codigoInput = tr.querySelector('[data-field="codigo"]');
+  const nombreInput = tr.querySelector('[data-field="producto"]');
+  const spinner     = tr.querySelector('.bulk-buscando');
+  const codigo = codigoInput.value.trim();
+  if (!codigo || nombreInput.value.trim()) return;
+
+  if (spinner) spinner.style.display = '';
+  try {
+    const data = await apiFetch(`/buscar-codigo/${encodeURIComponent(codigo)}`);
+    if (data.encontrado) {
+      nombreInput.value = data.nombre || '';
+      if (data.imagen) tr.dataset.imagen = data.imagen;
+    }
+  } catch { /* sin internet, ignorar */ }
+  finally { if (spinner) spinner.style.display = 'none'; }
+}
+
 function bulkAddRow() {
   bulkRowId++;
   const id   = bulkRowId;
@@ -808,19 +884,26 @@ function bulkAddRow() {
   tr.id    = `brow-${id}`;
   tr.innerHTML = `
     <td class="row-num">${document.querySelectorAll('#bulk-body tr').length + 1}</td>
-    <td><input class="cell-input" type="text"   placeholder="Nombre del producto" data-field="producto"></td>
-    <td><input class="cell-input" type="text"   placeholder="BEB-001"             data-field="codigo"></td>
+    <td><input class="cell-input" type="text" placeholder="Ej: 7501234567890" data-field="codigo"
+      onblur="bulkBuscarCodigo('brow-${id}')"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();bulkBuscarCodigo('brow-${id}');}"></td>
+    <td style="position:relative;">
+      <input class="cell-input" type="text" placeholder="Nombre del producto" data-field="producto">
+      <span class="bulk-buscando" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted);pointer-events:none;">
+        <i class="fas fa-circle-notch fa-spin"></i>
+      </span>
+    </td>
     <td><select class="cell-select" data-field="categoria">${catOptions(categoria)}</select></td>
     <td><select class="cell-select" data-field="proveedor">${provOptions(proveedor)}</select></td>
     <td><select class="cell-select" data-field="unidad">${unidadOptions(unidad)}</select></td>
     <td><input class="cell-input" type="number" placeholder="0.00" min="0" step="0.01" data-field="pCosto"></td>
-    <td><input class="cell-input" type="number" placeholder="0.00" min="0" step="0.01" data-field="pVenta"></td>
+    <td><input class="cell-input" type="number" placeholder="N/A"  min="0" step="0.01" data-field="pVenta"></td>
     <td><input class="cell-input" type="number" placeholder="0"    min="0" step="1"    data-field="stock" value="0"></td>
     <td><button class="btn-row-del" onclick="bulkDelRow(${id})" title="Eliminar fila"><i class="fas fa-times"></i></button></td>
   `;
   document.getElementById('bulk-body').appendChild(tr);
   updateBulkCount();
-  tr.querySelector('[data-field="producto"]').focus();
+  tr.querySelector('[data-field="codigo"]').focus();
 }
 
 function bulkAddRows(n) {
@@ -871,13 +954,11 @@ async function bulkSubmit() {
   for (const tr of rows) {
     const get    = f => tr.querySelector(`[data-field="${f}"]`)?.value?.trim() ?? '';
     const nombre = get('producto');
-    const venta  = get('pVenta');
 
     // Fila completamente vacía → ignorar
-    if (!nombre && !get('codigo') && !venta && !get('pCosto')) continue;
+    if (!nombre && !get('codigo') && !get('pVenta') && !get('pCosto')) continue;
 
     if (!nombre) { tr.querySelector('[data-field="producto"]').classList.add('err'); valid = false; }
-    if (!venta)  { tr.querySelector('[data-field="pVenta"]').classList.add('err');   valid = false; }
 
     productos.push({
       producto:  nombre,
@@ -886,12 +967,13 @@ async function bulkSubmit() {
       proveedor: get('proveedor'),
       unidad:    get('unidad'),
       pCosto:    get('pCosto') || null,
-      pVenta:    venta  || null,
+      pVenta:    get('pVenta') || null,
       stock:     get('stock')  || 0,
+      imagen:    tr.dataset.imagen || null,
     });
   }
 
-  if (!valid)           { toast('❌ Completa los campos obligatorios'); return; }
+  if (!valid)           { toast('❌ El nombre del producto es obligatorio'); return; }
   if (!productos.length){ toast('❌ No hay productos para guardar');    return; }
 
   const btn = document.getElementById('btn-bulk-save');
@@ -1569,15 +1651,77 @@ function closeInvDetalle() {
   document.getElementById('inv-detalle-overlay').classList.remove('open');
 }
 
-function openInvNew(codigo) {
-  _invCodigo = codigo;
+let _invNuevaImagen = null;
+
+function invNewImgUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    _invNuevaImagen = e.target.result;
+    invNewMostrarImagen(_invNuevaImagen);
+  };
+  reader.readAsDataURL(file);
+}
+
+function invNewMostrarImagen(src) {
+  const img   = document.getElementById('inv-new-img');
+  const empty = document.getElementById('inv-new-img-empty');
+  img.src = src;
+  img.style.display = '';
+  empty.style.display = 'none';
+}
+
+function invNewOcultarImagen() {
+  const img   = document.getElementById('inv-new-img');
+  const empty = document.getElementById('inv-new-img-empty');
+  img.src = '';
+  img.style.display = 'none';
+  empty.style.display = '';
+}
+
+function invNewStatus(icono, texto, spinning = false) {
+  const wrap = document.getElementById('inv-new-status');
+  const icon = document.getElementById('inv-new-status-icon');
+  const txt  = document.getElementById('inv-new-status-txt');
+  wrap.style.display = 'flex';
+  icon.className = `fas fa-${icono}${spinning ? ' fa-spin' : ''}`;
+  txt.textContent = texto;
+}
+
+function invNewOcultarStatus() {
+  document.getElementById('inv-new-status').style.display = 'none';
+}
+
+async function openInvNew(codigo) {
+  _invCodigo      = codigo;
+  _invNuevaImagen = null;
   document.getElementById('inv-new-codigo').textContent   = codigo;
   document.getElementById('inv-new-nombre').value         = '';
   document.getElementById('inv-new-pventa').value         = '';
   document.getElementById('inv-new-pcosto').value         = '';
   document.getElementById('inv-new-cat').innerHTML        = catOptions();
   document.getElementById('inv-new-unidad').innerHTML     = unidadOptions();
+  invNewOcultarImagen();
+  invNewStatus('circle-notch', 'Intentando extraer info de internet…', true);
   document.getElementById('inv-new-overlay').classList.add('open');
+
+  try {
+    const data = await apiFetch(`/buscar-codigo/${encodeURIComponent(codigo)}`);
+    if (data.encontrado) {
+      document.getElementById('inv-new-nombre').value = data.nombre || '';
+      if (data.imagen) {
+        _invNuevaImagen = data.imagen;
+        invNewMostrarImagen(data.imagen);
+      }
+      invNewStatus('check', 'Información obtenida de internet');
+    } else {
+      invNewStatus('triangle-exclamation', 'No se encontró info en internet');
+    }
+  } catch {
+    invNewOcultarStatus();
+  }
+
   setTimeout(() => document.getElementById('inv-new-nombre').focus(), 100);
 }
 
@@ -1588,18 +1732,17 @@ function closeInvNew() {
 
 async function guardarInvNuevo() {
   const nombre = document.getElementById('inv-new-nombre').value.trim();
-  const pVenta = parseFloat(document.getElementById('inv-new-pventa').value);
+  const pVenta = parseFloat(document.getElementById('inv-new-pventa').value) || null;
   const pCosto = parseFloat(document.getElementById('inv-new-pcosto').value) || null;
   const cat    = document.getElementById('inv-new-cat').value;
   const unidad = document.getElementById('inv-new-unidad').value;
 
-  if (!nombre)              { toast('⚠️ El nombre es requerido'); return; }
-  if (!pVenta || pVenta <= 0) { toast('⚠️ El precio de venta es requerido'); return; }
+  if (!nombre) { toast('⚠️ El nombre es requerido'); return; }
 
   try {
     const prod = await apiFetch('/productos', {
       method: 'POST',
-      body:   JSON.stringify({ codigo: _invCodigo, producto: nombre, pVenta, pCosto, categoria: cat, unidad, stock: 0 }),
+      body:   JSON.stringify({ codigo: _invCodigo, producto: nombre, pVenta, pCosto, categoria: cat, unidad, stock: 0, imagen: _invNuevaImagen }),
     });
     closeInvNew();
     toast('✅ Producto registrado');

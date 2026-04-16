@@ -546,9 +546,17 @@
     .granel-overlay.open .granel-modal { transform: translateY(0) scale(1); }
 
     .granel-head {
-      padding: 18px 20px 14px;
+      padding: 16px 20px;
       border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
     }
+    .granel-name  { font-size: 16px; font-weight: 700; }
+    .granel-close {
+      background: none; border: none; cursor: pointer;
+      color: var(--muted); font-size: 16px; padding: 4px 6px;
+      border-radius: 6px; line-height: 1;
+    }
+    .granel-close:hover { background: var(--bg); color: var(--text); }
     .granel-title { font-size: 17px; font-weight: 700; }
     .granel-sub   { font-size: 14px; color: var(--muted); margin-top: 3px; }
 
@@ -964,6 +972,29 @@
     }
     .inv-contador::-webkit-inner-spin-button,
     .inv-contador::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+    /* ── Modal nuevo producto — imagen ── */
+    .inv-new-img-wrap {
+      position: relative;
+      width: 110px; height: 110px;
+      flex-shrink: 0;
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .inv-new-img-wrap img { width: 100%; height: 100%; object-fit: cover; }
+    #inv-new-img-empty { color: var(--muted); font-size: 28px; }
+    .inv-new-img-btn {
+      position: absolute; bottom: 0; left: 0; right: 0;
+      background: rgba(0,0,0,.5);
+      color: #fff; font-size: 14px;
+      display: flex; align-items: center; justify-content: center;
+      padding: 5px; cursor: pointer;
+      opacity: 0; transition: opacity .15s;
+    }
+    .inv-new-img-wrap:hover .inv-new-img-btn { opacity: 1; }
     .inv-btn-adj {
       width: 42px; height: 42px; border-radius: 50%;
       border: 2px solid var(--border); background: var(--bg);

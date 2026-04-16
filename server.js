@@ -2,6 +2,7 @@ const express            = require('express');
 const cors               = require('cors');
 const path               = require('path');
 const crypto             = require('crypto');
+const https              = require('https');
 const { execSync }       = require('child_process');
 const { MongoClient, ObjectId } = require('mongodb');
 
@@ -20,9 +21,9 @@ const localDate = () => new Date().toLocaleDateString('en-CA');
 const wrap = fn => (req, res) => fn(req, res).catch(err => res.status(500).json({ error: err.message }));
 
 // Construye el documento de producto normalizado
-function buildProductDoc({ codigo, producto, pCosto, pVenta, stock, categoria, proveedor, unidad }) {
+function buildProductDoc({ codigo, producto, pCosto, pVenta, stock, categoria, proveedor, unidad, imagen }) {
   const parseNum = (v, fn) => v !== undefined && v !== '' && v != null ? fn(Number(v)) : null;
-  return {
+  const doc = {
     codigo:       (codigo    ?? '').trim(),
     producto:     producto.trim(),
     pCosto:       parseNum(pCosto,  n => round2(n)),
@@ -33,6 +34,8 @@ function buildProductDoc({ codigo, producto, pCosto, pVenta, stock, categoria, p
     unidad:       (unidad    ?? '').trim(),
     actualizadoEn: new Date(),
   };
+  if (imagen !== undefined) doc.imagen = imagen || null;
+  return doc;
 }
 
 // Calcula ganancia de una venta
@@ -478,6 +481,67 @@ app.get('/api/inv-reportes/:id', wrap(async (req, res) => {
   });
   if (!doc) return res.status(404).json({ error: 'No encontrado' });
   res.json(doc);
+}));
+
+// ── Búsqueda externa por código de barras ────────────────────────
+function fetchHtml(url, redireccion = 0) {
+  return new Promise((resolve, reject) => {
+    if (redireccion > 4) return reject(new Error('Demasiadas redirecciones'));
+    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, res => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return fetchHtml(res.headers.location, redireccion + 1).then(resolve).catch(reject);
+      }
+      let data = '';
+      res.on('data', c => data += c);
+      res.on('end', () => resolve(data));
+    }).on('error', reject);
+  });
+}
+
+function fetchBuffer(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, res => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return fetchBuffer(res.headers.location).then(resolve).catch(reject);
+      }
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => resolve(Buffer.concat(chunks)));
+    }).on('error', reject);
+  });
+}
+
+
+app.get('/api/buscar-codigo/:codigo', wrap(async (req, res) => {
+  const { codigo } = req.params;
+  try {
+    const html = await fetchHtml(`https://go-upc.com/search?q=${encodeURIComponent(codigo)}`);
+
+    // Nombre: primer <h1>
+    const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
+    const nombre  = h1Match ? h1Match[1].replace(/<[^>]+>/g, '').trim() : null;
+
+    if (!nombre || /not found|sin resultado|no result/i.test(nombre)) {
+      return res.json({ encontrado: false });
+    }
+
+    // Imagen: primer img apuntando a S3 de go-upc
+    const imgMatch = html.match(/<img[^>]+src=["'](https:\/\/go-upc\.s3[^"']+)["']/i);
+    const imgUrl   = imgMatch ? imgMatch[1] : null;
+
+    let imagen = null;
+    if (imgUrl) {
+      try {
+        const buf = await fetchBuffer(imgUrl);
+        const ext = imgUrl.endsWith('.png') ? 'png' : 'jpeg';
+        imagen = `data:image/${ext};base64,${buf.toString('base64')}`;
+      } catch { /* sin imagen */ }
+    }
+
+    res.json({ encontrado: true, nombre, imagen });
+  } catch {
+    res.json({ encontrado: false });
+  }
 }));
 
 // ── Versión ──────────────────────────────────────────────────────
