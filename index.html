@@ -640,18 +640,22 @@
           onchange="loadCajaReporte()">
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;margin-bottom:24px;">
         <div class="table-card" style="padding:20px;text-align:center;">
-          <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Total Depósitos</div>
-          <div id="cr-depositos" style="font-size:24px;font-weight:700;color:var(--success);">$0.00</div>
+          <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Depósitos</div>
+          <div id="cr-depositos" style="font-size:22px;font-weight:700;color:var(--success);">$0.00</div>
         </div>
         <div class="table-card" style="padding:20px;text-align:center;">
-          <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Total Retiros</div>
-          <div id="cr-retiros" style="font-size:24px;font-weight:700;color:var(--danger);">$0.00</div>
+          <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Retiros</div>
+          <div id="cr-retiros" style="font-size:22px;font-weight:700;color:var(--danger);">$0.00</div>
         </div>
         <div class="table-card" style="padding:20px;text-align:center;">
-          <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Balance Neto</div>
-          <div id="cr-balance" style="font-size:24px;font-weight:700;">$0.00</div>
+          <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Ventas Efectivo</div>
+          <div id="cr-ventas" style="font-size:22px;font-weight:700;color:var(--primary);">$0.00</div>
+        </div>
+        <div class="table-card" style="padding:20px;text-align:center;">
+          <div style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Balance en Caja</div>
+          <div id="cr-balance" style="font-size:22px;font-weight:700;">$0.00</div>
         </div>
       </div>
 

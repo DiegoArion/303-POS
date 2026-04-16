@@ -392,9 +392,17 @@ app.post('/api/caja', wrap(async (req, res) => {
 }));
 
 app.get('/api/caja', wrap(async (req, res) => {
-  const fecha = req.query.fecha || localDate();
-  const movs  = await db.collection('caja').find({ fecha }).sort({ creadoEn: 1 }).toArray();
-  res.json(movs);
+  const fecha  = req.query.fecha || localDate();
+  const inicio = new Date(`${fecha}T00:00:00`);
+  const fin    = new Date(`${fecha}T23:59:59.999`);
+  const [movimientos, ventas] = await Promise.all([
+    db.collection('caja').find({ fecha }).sort({ creadoEn: 1 }).toArray(),
+    db.collection('ventas').find(
+      { fecha: { $gte: inicio, $lte: fin }, metodoPago: 'efectivo' },
+      { projection: { folio: 1, total: 1, fecha: 1 } }
+    ).sort({ fecha: 1 }).toArray(),
+  ]);
+  res.json({ movimientos, ventas });
 }));
 
 // ── Dashboard ────────────────────────────────────────────────────

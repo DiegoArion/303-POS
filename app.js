@@ -2447,35 +2447,58 @@ async function loadCajaReporte() {
   const fecha = document.getElementById('caja-fecha').value;
   if (!fecha) return;
   try {
-    const movs = await apiFetch(`/caja?fecha=${fecha}`);
-    const depositos = movs.filter(m => m.tipo === 'deposito').reduce((s, m) => s + m.monto, 0);
-    const retiros   = movs.filter(m => m.tipo === 'retiro').reduce((s, m)  => s + m.monto, 0);
-    const balance   = depositos - retiros;
+    const { movimientos, ventas } = await apiFetch(`/caja?fecha=${fecha}`);
+
+    const depositos     = movimientos.filter(m => m.tipo === 'deposito').reduce((s, m) => s + m.monto, 0);
+    const retiros       = movimientos.filter(m => m.tipo === 'retiro').reduce((s, m)  => s + m.monto, 0);
+    const totalVentas   = ventas.reduce((s, v) => s + (v.total ?? 0), 0);
+    const balance       = depositos - retiros + totalVentas;
 
     document.getElementById('cr-depositos').textContent = fmt(depositos);
     document.getElementById('cr-retiros').textContent   = fmt(retiros);
+    document.getElementById('cr-ventas').textContent    = fmt(totalVentas);
     document.getElementById('cr-balance').textContent   = fmt(balance);
 
     const tbody = document.getElementById('caja-reporte-body');
     const empty = document.getElementById('caja-reporte-empty');
 
-    if (!movs.length) {
+    if (!movimientos.length && !ventas.length) {
       tbody.innerHTML     = '';
       empty.style.display = '';
       return;
     }
     empty.style.display = 'none';
-    tbody.innerHTML = movs.map(m => `
-      <tr>
-        <td style="padding:12px 16px;color:var(--muted);font-size:13px;">${m.hora || ''}</td>
-        <td style="padding:12px 16px;">
-          <span class="badge" style="background:${m.tipo === 'deposito' ? 'var(--success)' : 'var(--danger)'};">
-            ${m.tipo === 'deposito' ? 'Depósito' : 'Retiro'}
-          </span>
-        </td>
-        <td style="padding:12px 16px;color:var(--muted);font-size:13px;">${m.concepto || '—'}</td>
-        <td style="padding:12px 16px;text-align:right;font-weight:700;">${fmt(m.monto)}</td>
-      </tr>`).join('');
+
+    // Mezclar movimientos y ventas ordenados por hora
+    const filas = [
+      ...movimientos.map(m => ({ _t: new Date(m.creadoEn), tipo: 'mov', data: m })),
+      ...ventas.map(v      => ({ _t: new Date(v.fecha),    tipo: 'venta', data: v })),
+    ].sort((a, b) => a._t - b._t);
+
+    const hora = d => new Date(d).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+
+    tbody.innerHTML = filas.map(({ tipo, data }) => {
+      if (tipo === 'mov') {
+        const color = data.tipo === 'deposito' ? 'var(--success)' : 'var(--danger)';
+        return `<tr>
+          <td style="padding:12px 16px;color:var(--muted);font-size:13px;">${hora(data.creadoEn)}</td>
+          <td style="padding:12px 16px;">
+            <span class="badge" style="background:${color};">${data.tipo === 'deposito' ? 'Depósito' : 'Retiro'}</span>
+          </td>
+          <td style="padding:12px 16px;color:var(--muted);font-size:13px;">${data.concepto || '—'}</td>
+          <td style="padding:12px 16px;text-align:right;font-weight:700;">${fmt(data.monto)}</td>
+        </tr>`;
+      } else {
+        return `<tr>
+          <td style="padding:12px 16px;color:var(--muted);font-size:13px;">${hora(data.fecha)}</td>
+          <td style="padding:12px 16px;">
+            <span class="badge" style="background:var(--primary-light);color:var(--primary-dark);">Venta</span>
+          </td>
+          <td style="padding:12px 16px;color:var(--muted);font-size:13px;">${data.folio || '—'}</td>
+          <td style="padding:12px 16px;text-align:right;font-weight:700;color:var(--primary-dark);">+${fmt(data.total)}</td>
+        </tr>`;
+      }
+    }).join('');
   } catch (err) {
     toast(`❌ ${err.message}`);
   }
