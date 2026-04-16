@@ -620,6 +620,59 @@ function descargarInventario() {
   URL.revokeObjectURL(url);
 }
 
+function imprimirInventario() {
+  const lista = [...(window._invAll ?? [])].sort((a, b) => a.stock - b.stock);
+  if (!lista.length) { toast('⚠️ Sin productos para imprimir'); return; }
+
+  const fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  const filas = lista.map(p => {
+    return `<tr class="${p.stock === 0 ? 'out' : p.stock <= 5 ? 'low' : ''}">
+      <td>${p.name}</td>
+      <td>${p.sku || '—'}</td>
+      <td class="num">${p.stock}</td>
+    </tr>`;
+  }).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Inventario ${fecha}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+@page{size:58mm auto;margin:2mm 3mm;}
+body{font-family:'Courier New',Courier,monospace;font-size:7pt;width:52mm;color:#000;}
+.c{text-align:center;}
+.bold{font-weight:700;}
+.dash{border:none;border-top:1px dashed #000;margin:3px 0;}
+.solid{border:none;border-top:1.5px solid #000;margin:3px 0;}
+table{width:100%;border-collapse:collapse;}
+th{font-size:6.5pt;text-transform:uppercase;border-bottom:1px solid #000;padding:2px 1px;text-align:left;}
+td{padding:2px 1px;vertical-align:top;word-break:break-word;}
+.num{text-align:right;}
+tr.out td{font-weight:700;}
+tr.low td{font-weight:600;}
+</style></head><body>
+<div class="c bold" style="font-size:10pt;">INVENTARIO</div>
+<div class="c">${fecha}</div>
+<hr class="solid">
+<table>
+  <thead><tr><th>Producto</th><th>SKU</th><th class="num">Stock</th></tr></thead>
+  <tbody>${filas}</tbody>
+</table>
+<hr class="dash">
+<div class="c" style="font-size:6.5pt;">${lista.length} productos</div>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=320,height=600,toolbar=0,scrollbars=0,status=0,menubar=0');
+  if (!win) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  // setTimeout(() => {
+  //   win.print();
+  //   win.onafterprint = () => win.close();
+  // }, 250);
+}
+
 /* ─── MODAL PRODUCTO ─── */
 function fImgMostrar(src) {
   document.getElementById('f-img-preview').src = src;
