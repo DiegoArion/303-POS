@@ -349,6 +349,68 @@ function setMetodo(m, el) {
   el.classList.add('active');
 }
 
+function imprimirTicket(venta) {
+  const fecha    = new Date(venta.fecha);
+  const fechaStr = fecha.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const horaStr  = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  const metodo   = venta.metodoPago === 'tarjeta' ? 'Tarjeta' : 'Efectivo';
+  const money    = n => '$' + Number(n).toFixed(2);
+
+  const productosHtml = venta.productos.map(p => {
+    const nombre = p.nombre.length > 26 ? p.nombre.slice(0, 24) + '…' : p.nombre;
+    const cant   = p.esGranel
+      ? `${p.cantidad} ${p.unidad || 'kg'}`
+      : `${p.cantidad}${p.unidad ? ' ' + p.unidad : ''} x ${money(p.pVenta)}`;
+    return `<div class="prod">
+      <div class="pnombre">${nombre}</div>
+      <div class="pdet"><span>${cant}</span><span>${money(p.subtotal)}</span></div>
+    </div>`;
+  }).join('');
+
+  const notaHtml = venta.nota
+    ? `<hr class="dash"><div style="font-size:7.5pt;">Nota: ${venta.nota}</div>` : '';
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>${venta.folio}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+@page{size:58mm auto;margin:2mm 3mm;}
+body{font-family:'Courier New',Courier,monospace;font-size:8.5pt;width:52mm;color:#000;}
+.c{text-align:center;}
+.neg{font-size:12pt;font-weight:700;letter-spacing:1px;}
+.row{display:flex;justify-content:space-between;margin:1.5px 0;}
+.dash{border:none;border-top:1px dashed #000;margin:3px 0;}
+.solid{border:none;border-top:1.5px solid #000;margin:3px 0;}
+.prod{margin:3px 0;}
+.pnombre{font-weight:600;}
+.pdet{display:flex;justify-content:space-between;padding-left:3mm;color:#222;}
+.total{display:flex;justify-content:space-between;font-size:11.5pt;font-weight:700;margin:2px 0;}
+</style></head><body>
+<div class="c neg">PUNTO DE VENTA</div>
+<div class="c">${fechaStr} &nbsp; ${horaStr}</div>
+<hr class="dash">
+<div class="row"><span>Folio</span><span>${venta.folio}</span></div>
+<div class="row"><span>Pago</span><span>${metodo}</span></div>
+<hr class="dash">
+${productosHtml}
+<hr class="solid">
+<div class="total"><span>TOTAL</span><span>${money(venta.total)}</span></div>
+<hr class="solid">
+${notaHtml}
+<div class="c" style="margin-top:6px;font-size:8pt;">¡Gracias por su compra!</div>
+</body></html>`;
+
+  const win = window.open('', '_blank', 'width=320,height=600,toolbar=0,scrollbars=0,status=0,menubar=0');
+  if (!win) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  // setTimeout(() => {
+  //   win.print();
+  //   win.onafterprint = () => win.close();
+  // }, 250);
+}
+
 async function processSale() {
   if (!cart.length) return;
 
@@ -384,6 +446,7 @@ async function processSale() {
     const venta = await res.json();
     const icono = metodoPago === 'tarjeta' ? '💳' : '💵';
     toast(`${icono} ${venta.folio} — ${fmt(venta.total)} registrada`);
+    imprimirTicket(venta);
     clearCart();
   } catch (err) {
     toast(`❌ Error: ${err.message}`);
