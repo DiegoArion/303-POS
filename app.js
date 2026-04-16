@@ -529,6 +529,34 @@ function renderInventoryTable(list) {
   }).join('');
 }
 
+function descargarInventario() {
+  const lista = [...(window._invAll ?? [])].sort((a, b) => a.stock - b.stock);
+  if (!lista.length) { toast('⚠️ Sin productos para descargar'); return; }
+
+  const encabezado = ['Producto', 'SKU', 'Categoría', 'Proveedor', 'Unidad', 'Precio Costo', 'Precio Venta', 'Stock', 'Estado'];
+  const filas = lista.map(p => [
+    p.name,
+    p.sku   || '',
+    p.cat   || '',
+    p.proveedor || '',
+    p.unidad    || '',
+    p.retail != null ? p.retail : '',
+    p.price  != null ? p.price  : '',
+    p.stock,
+    stockLabel(p.stock),
+  ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+
+  const csv  = [encabezado.join(','), ...filas].join('\n');
+  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  const fecha = new Date().toLocaleDateString('en-CA');
+  a.href     = url;
+  a.download = `inventario_${fecha}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 /* ─── MODAL PRODUCTO ─── */
 function fImgMostrar(src) {
   document.getElementById('f-img-preview').src = src;

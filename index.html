@@ -280,6 +280,10 @@
             <i class="fas fa-search"></i>
             <input id="i-search" type="text" placeholder="Filtrar inventario…" oninput="filterInventory()">
           </div>
+          <button onclick="descargarInventario()"
+            style="display:flex;align-items:center;gap:7px;padding:8px 14px;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text);font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;">
+            <i class="fas fa-download"></i> Descargar
+          </button>
           <button class="btn-add-prod" onclick="openModal()">
             <i class="fas fa-plus"></i> Agregar producto
           </button>
