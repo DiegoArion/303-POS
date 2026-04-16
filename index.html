@@ -946,6 +946,11 @@
           <input id="f-codigo" type="text" placeholder="Ej: 7501234567890" autocomplete="off"
             onblur="buscarPorCodigoModal()"
             onkeydown="if(event.key==='Enter'){event.preventDefault();buscarPorCodigoModal();}">
+          <button type="button" id="btn-generar-codigo" onclick="generarCodigoModal()"
+            style="white-space:nowrap;padding:7px 11px;font-size:12px;border:1.5px solid var(--border);border-radius:8px;background:var(--bg);color:var(--muted);cursor:pointer;display:flex;align-items:center;gap:5px;"
+            title="Generar código interno EAN-13">
+            <i class="fas fa-barcode"></i> Generar
+          </button>
           <div id="f-codigo-status" style="display:none;align-items:center;gap:6px;font-size:12px;color:var(--muted);white-space:nowrap;">
             <i id="f-codigo-status-icon" class="fas fa-circle-notch fa-spin"></i>
             <span id="f-codigo-status-txt"></span>
@@ -963,6 +968,9 @@
             <i class="fas fa-camera"></i>
             <input type="file" accept="image/*" style="display:none;" onchange="fImgUpload(this)">
           </label>
+          <button type="button" id="btn-img-borrar" onclick="fImgOcultar()"
+            style="display:none;position:absolute;top:4px;right:4px;background:rgba(0,0,0,.55);border:none;border-radius:50%;width:20px;height:20px;cursor:pointer;color:#fff;font-size:10px;line-height:20px;text-align:center;padding:0;"
+            title="Quitar imagen"><i class="fas fa-times"></i></button>
         </div>
         <div class="field full" style="flex:1;min-width:0;">
           <label>Nombre del producto *</label>

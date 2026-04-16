@@ -90,6 +90,28 @@ app.post('/api/productos', wrap(async (req, res) => {
   res.status(201).json({ ...doc, _id: result.insertedId });
 }));
 
+app.get('/api/productos/generar-codigo', wrap(async (_req, res) => {
+  const ultimo = await db.collection('productos')
+    .find({ codigo: { $regex: '^2\\d{12}$' } })
+    .sort({ codigo: -1 })
+    .limit(1)
+    .toArray();
+
+  let base12;
+  if (ultimo.length) {
+    base12 = String(parseInt(ultimo[0].codigo.slice(0, 12)) + 1).padStart(12, '0');
+  } else {
+    base12 = '200000000001';
+  }
+
+  // Dígito verificador EAN-13
+  const digits = base12.split('').map(Number);
+  const suma   = digits.reduce((s, d, i) => s + d * (i % 2 === 0 ? 1 : 3), 0);
+  const check  = (10 - (suma % 10)) % 10;
+
+  res.json({ codigo: base12 + check });
+}));
+
 app.put('/api/productos/:id', wrap(async (req, res) => {
   if (!req.body.producto?.trim()) return res.status(400).json({ error: 'El nombre del producto es requerido' });
   const update = buildProductDoc(req.body);

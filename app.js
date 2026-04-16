@@ -512,6 +512,7 @@ function fImgMostrar(src) {
   document.getElementById('f-img-preview').src = src;
   document.getElementById('f-img-preview').style.display = '';
   document.getElementById('f-img-empty').style.display = 'none';
+  document.getElementById('btn-img-borrar').style.display = '';
 }
 
 function fImgOcultar() {
@@ -519,6 +520,7 @@ function fImgOcultar() {
   document.getElementById('f-img-preview').style.display = 'none';
   document.getElementById('f-img-empty').style.display = '';
   document.getElementById('f-imagen').value = '';
+  document.getElementById('btn-img-borrar').style.display = 'none';
 }
 
 function fImgUpload(input) {
@@ -541,12 +543,37 @@ function fCodigoStatus(icono, texto, spinning = false) {
   txt.textContent = texto;
 }
 
+async function generarCodigo() {
+  const data = await apiFetch('/productos/generar-codigo');
+  return data.codigo;
+}
+
+async function generarCodigoModal() {
+  const btn = document.getElementById('btn-generar-codigo');
+  btn.disabled = true;
+  try {
+    const codigo = await generarCodigo();
+    document.getElementById('f-codigo').value = codigo;
+    document.getElementById('f-codigo-status').style.display = 'none';
+  } catch { toast('❌ Error generando código'); }
+  finally { btn.disabled = false; }
+}
+
+async function bulkGenerarCodigo(rowId) {
+  const tr = document.getElementById(rowId);
+  if (!tr) return;
+  try {
+    const codigo = await generarCodigo();
+    tr.querySelector('[data-field="codigo"]').value = codigo;
+  } catch { toast('❌ Error generando código'); }
+}
+
 async function buscarPorCodigoModal() {
   const codigo = document.getElementById('f-codigo').value.trim();
   if (!codigo) return;
-  // Solo buscar en modo nuevo y si nombre está vacío
   if (document.getElementById('f-id').value) return;
   if (document.getElementById('f-nombre').value.trim()) return;
+  if (codigo.startsWith('2')) return; // código interno, no buscar
 
   fCodigoStatus('circle-notch', 'Buscando…', true);
   try {
@@ -860,6 +887,7 @@ async function bulkBuscarCodigo(rowId) {
   const spinner     = tr.querySelector('.bulk-buscando');
   const codigo = codigoInput.value.trim();
   if (!codigo || nombreInput.value.trim()) return;
+  if (codigo.startsWith('2')) return; // código interno, no buscar
 
   if (spinner) spinner.style.display = '';
   try {
@@ -884,9 +912,15 @@ function bulkAddRow() {
   tr.id    = `brow-${id}`;
   tr.innerHTML = `
     <td class="row-num">${document.querySelectorAll('#bulk-body tr').length + 1}</td>
-    <td><input class="cell-input" type="text" placeholder="Ej: 7501234567890" data-field="codigo"
-      onblur="bulkBuscarCodigo('brow-${id}')"
-      onkeydown="if(event.key==='Enter'){event.preventDefault();bulkBuscarCodigo('brow-${id}');}"></td>
+    <td style="position:relative;">
+      <input class="cell-input" type="text" placeholder="Ej: 7501234567890" data-field="codigo"
+        onblur="bulkBuscarCodigo('brow-${id}')"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();bulkBuscarCodigo('brow-${id}');}">
+      <button type="button" onclick="bulkGenerarCodigo('brow-${id}')" title="Generar código interno"
+        style="position:absolute;right:4px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;padding:2px 4px;">
+        <i class="fas fa-barcode"></i>
+      </button>
+    </td>
     <td style="position:relative;">
       <input class="cell-input" type="text" placeholder="Nombre del producto" data-field="producto">
       <span class="bulk-buscando" style="display:none;position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted);pointer-events:none;">
