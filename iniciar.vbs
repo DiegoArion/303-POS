@@ -37,5 +37,20 @@ Do While Not listo And intentos < 30
   If ps.ExitCode = 0 Then listo = True
 Loop
 
-' Abrir el POS en el navegador
-shell.Run "http://localhost:3000"
+' Abrir el POS en Chrome/Edge con impresión automática (sin diálogo)
+Dim chromePath, edgePath, browserCmd
+chromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
+edgePath   = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+
+Dim fso
+Set fso = CreateObject("Scripting.FileSystemObject")
+
+If fso.FileExists(chromePath) Then
+  browserCmd = """" & chromePath & """ --kiosk-printing http://localhost:3000"
+ElseIf fso.FileExists(edgePath) Then
+  browserCmd = """" & edgePath & """ --kiosk-printing http://localhost:3000"
+Else
+  browserCmd = "http://localhost:3000"
+End If
+
+shell.Run browserCmd

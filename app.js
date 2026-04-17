@@ -374,17 +374,17 @@ function imprimirTicket(venta) {
 <title>${venta.folio}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-@page{size:58mm auto;margin:2mm 3mm;}
-body{font-family:'Courier New',Courier,monospace;font-size:8.5pt;width:52mm;color:#000;}
+@page{size:58mm auto;margin:2mm 6mm;}
+body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;width:46mm;color:#000;}
 .c{text-align:center;}
 .neg{font-size:12pt;font-weight:700;letter-spacing:1px;}
-.row{display:flex;justify-content:space-between;margin:1.5px 0;}
-.dash{border:none;border-top:1px dashed #000;margin:3px 0;}
-.solid{border:none;border-top:1.5px solid #000;margin:3px 0;}
-.prod{margin:3px 0;}
-.pnombre{font-weight:600;}
-.pdet{display:flex;justify-content:space-between;padding-left:3mm;color:#222;}
-.total{display:flex;justify-content:space-between;font-size:11.5pt;font-weight:700;margin:2px 0;}
+.row{display:flex;justify-content:space-between;margin:2px 0;}
+.dash{border:none;border-top:1px dashed #000;margin:4px 0;}
+.solid{border:none;border-top:1.5px solid #000;margin:4px 0;}
+.prod{margin:4px 0;}
+.pnombre{font-weight:700;}
+.pdet{display:flex;justify-content:space-between;padding-left:2mm;}
+.total{display:flex;justify-content:space-between;font-size:11pt;font-weight:700;margin:3px 0;}
 </style></head><body>
 <div class="c neg">PUNTO DE VENTA</div>
 <div class="c">${fechaStr} &nbsp; ${horaStr}</div>
@@ -405,10 +405,10 @@ ${notaHtml}
   win.document.write(html);
   win.document.close();
   win.focus();
-  // setTimeout(() => {
-  //   win.print();
-  //   win.onafterprint = () => win.close();
-  // }, 250);
+  setTimeout(() => {
+    win.print();
+    win.onafterprint = () => win.close();
+  }, 250);
 }
 
 async function processSale() {
@@ -632,40 +632,43 @@ function imprimirInventario() {
 
   const fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
-  const filas = lista.map(p => {
-    return `<tr class="${p.stock === 0 ? 'out' : p.stock <= 5 ? 'low' : ''}">
-      <td>${p.name}</td>
-      <td>${p.sku || '—'}</td>
+  const filas = lista.map(p => `
+    <tr class="${p.stock === 0 ? 'out' : p.stock <= 5 ? 'low' : ''}">
+      <td class="info">
+        <div class="pname">${p.name}</div>
+        ${p.sku ? `<div class="psku">${p.sku}</div>` : ''}
+      </td>
       <td class="num">${p.stock}</td>
-    </tr>`;
-  }).join('');
+    </tr>`).join('');
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>Inventario ${fecha}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-@page{size:58mm auto;margin:2mm 3mm;}
-body{font-family:'Courier New',Courier,monospace;font-size:7pt;width:52mm;color:#000;}
+@page{size:58mm auto;margin:2mm 6mm;}
+body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;width:46mm;color:#000;}
 .c{text-align:center;}
 .bold{font-weight:700;}
-.dash{border:none;border-top:1px dashed #000;margin:3px 0;}
-.solid{border:none;border-top:1.5px solid #000;margin:3px 0;}
+.dash{border:none;border-top:1px dashed #000;margin:4px 0;}
+.solid{border:none;border-top:1.5px solid #000;margin:4px 0;}
 table{width:100%;border-collapse:collapse;}
-th{font-size:6.5pt;text-transform:uppercase;border-bottom:1px solid #000;padding:2px 1px;text-align:left;}
-td{padding:2px 1px;vertical-align:top;word-break:break-word;}
-.num{text-align:right;}
-tr.out td{font-weight:700;}
-tr.low td{font-weight:600;}
+th{font-size:8pt;text-transform:uppercase;border-bottom:1px solid #000;padding:3px 2px;text-align:left;}
+td{padding:4px 2px;vertical-align:middle;}
+.info{width:80%;}
+.pname{font-size:9pt;line-height:1.2;}
+.psku{font-size:7.5pt;color:#444;margin-top:1px;}
+.num{text-align:right;font-size:11pt;white-space:nowrap;padding-right:2mm;}
+tr + tr td{border-top:1px dotted #ccc;}
 </style></head><body>
-<div class="c bold" style="font-size:10pt;">INVENTARIO</div>
-<div class="c">${fecha}</div>
+<div class="c bold" style="font-size:12pt;">INVENTARIO</div>
+<div class="c" style="font-size:8pt;">${fecha}</div>
 <hr class="solid">
 <table>
-  <thead><tr><th>Producto</th><th>SKU</th><th class="num">Stock</th></tr></thead>
+  <thead><tr><th>Producto / SKU</th><th class="num">Stk</th></tr></thead>
   <tbody>${filas}</tbody>
 </table>
 <hr class="dash">
-<div class="c" style="font-size:6.5pt;">${lista.length} productos</div>
+<div class="c" style="font-size:8pt;">${lista.length} productos</div>
 </body></html>`;
 
   const win = window.open('', '_blank', 'width=320,height=600,toolbar=0,scrollbars=0,status=0,menubar=0');
@@ -682,30 +685,30 @@ tr.low td{font-weight:600;}
 function imprimirEtiqueta(sku, nombre) {
   // Detectar formato: EAN-13 si son 13 dígitos, si no Code128
   const formato = /^\d{13}$/.test(sku) ? 'EAN13' : 'CODE128';
-  const nombreCorto = nombre.length > 28 ? nombre.slice(0, 26) + '…' : nombre;
+  const nombreCorto = nombre;
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>Etiqueta ${sku}</title>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-@page{size:50mm 25mm;margin:0;}
-body{width:50mm;height:25mm;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;font-family:'Courier New',Courier,monospace;overflow:hidden;}
-.nombre{font-size:6.5pt;font-weight:700;text-align:center;max-width:48mm;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:1mm;}
-svg{max-width:48mm;}
+@page{size:58mm auto;margin:2mm 6mm;}
+body{width:46mm;font-family:Arial,Helvetica,sans-serif;padding:1mm 0;}
+.nombre{font-size:13pt;font-weight:700;text-align:center;width:100%;
+  word-break:break-word;line-height:1.3;margin-bottom:3mm;}
+svg{width:100%;display:block;}
 </style></head><body>
 <div class="nombre">${nombreCorto}</div>
 <svg id="bc"></svg>
 <script>
   JsBarcode('#bc','${sku}',{
     format:'${formato}',
-    width:1.5,
-    height:28,
-    fontSize:8,
-    margin:0,
-    displayValue:true
+    width:2,
+    height:50,
+    fontSize:10,
+    margin:4,
+    displayValue:true,
+    textMargin:3
   });
 <\/script>
 </body></html>`;
@@ -2715,16 +2718,12 @@ function imprimirCajaReporte() {
       const signo = data.tipo === 'deposito' ? '+' : '-';
       const label = data.tipo === 'deposito' ? 'DEP' : 'RET';
       return `<tr>
-        <td>${hora(data.creadoEn)}</td>
-        <td>${label}</td>
-        <td>${data.concepto || '—'}</td>
+        <td><div>${label} ${data.concepto || '—'}</div><div class="hora">${hora(data.creadoEn)}</div></td>
         <td class="num">${signo}${money(data.monto)}</td>
       </tr>`;
     } else {
       return `<tr>
-        <td>${hora(data.fecha)}</td>
-        <td>VTA</td>
-        <td>${data.folio || '—'}</td>
+        <td><div>VTA ${data.folio || '—'}</div><div class="hora">${hora(data.fecha)}</div></td>
         <td class="num">+${money(data.total)}</td>
       </tr>`;
     }
@@ -2734,23 +2733,26 @@ function imprimirCajaReporte() {
 <title>Caja ${fechaFmt}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-@page{size:58mm auto;margin:2mm 3mm;}
-body{font-family:'Courier New',Courier,monospace;font-size:7.5pt;width:52mm;color:#000;}
+@page{size:58mm auto;margin:2mm 6mm;}
+body{font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;width:46mm;color:#000;}
 .c{text-align:center;}
 .dash{border:none;border-top:1px dashed #000;margin:3px 0;}
 .solid{border:none;border-top:1.5px solid #000;margin:3px 0;}
 table{width:100%;border-collapse:collapse;}
-th{font-size:6.5pt;text-transform:uppercase;border-bottom:1px solid #000;padding:2px 1px;text-align:left;}
-td{padding:2px 1px;font-size:7pt;}
-.num{text-align:right;}
-.res{display:flex;justify-content:space-between;margin:1.5px 0;}
+th{font-size:7pt;text-transform:uppercase;border-bottom:1px solid #000;padding:3px 2px;text-align:left;}
+td{padding:3px 2px;font-size:8pt;vertical-align:top;}
+td + td{border-top:none;}
+tr + tr td{border-top:1px dotted #ccc;}
+.hora{font-size:8pt;margin-top:1px;}
+.num{text-align:right;font-size:9pt;white-space:nowrap;padding-right:2mm;}
+.res{display:flex;justify-content:space-between;margin:1.5px 0;padding-right:2mm;}
 .bold{font-weight:700;}
 </style></head><body>
 <div class="c bold" style="font-size:10pt;">REPORTE DE CAJA</div>
 <div class="c">${fechaFmt}</div>
 <hr class="solid">
 <table>
-  <thead><tr><th>Hora</th><th>Tipo</th><th>Concepto/Folio</th><th class="num">Monto</th></tr></thead>
+  <thead><tr><th>Tipo / Concepto</th><th class="num">Monto</th></tr></thead>
   <tbody>${filas || '<tr><td colspan="4" style="text-align:center;">Sin movimientos</td></tr>'}</tbody>
 </table>
 <hr class="solid">
