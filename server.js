@@ -185,9 +185,22 @@ app.get('/api/categorias', wrap(async (_req, res) => {
 // ── Config ───────────────────────────────────────────────────────
 app.get('/api/config', wrap(async (_req, res) => {
   const docs = await db.collection('config').find({}).toArray();
-  const cfg  = { categorias: [], proveedores: [], unidades: [] };
-  for (const d of docs) if (d.tipo in cfg) cfg[d.tipo] = d.valores ?? [];
+  const cfg  = { categorias: [], proveedores: [], unidades: [], impresion: null };
+  for (const d of docs) {
+    if (d.tipo === 'impresion') cfg.impresion = d.tickets ?? null;
+    else if (d.tipo in cfg)    cfg[d.tipo]   = d.valores ?? [];
+  }
   res.json(cfg);
+}));
+
+app.put('/api/config/impresion', wrap(async (req, res) => {
+  const tickets = req.body;
+  await db.collection('config').updateOne(
+    { tipo: 'impresion' },
+    { $set: { tipo: 'impresion', tickets, updatedAt: new Date() } },
+    { upsert: true }
+  );
+  res.json({ ok: true, tickets });
 }));
 
 app.put('/api/config/:tipo', wrap(async (req, res) => {

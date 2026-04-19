@@ -12,6 +12,34 @@ let ventaFiltro  = '';
 let cfgCategorias  = [];
 let cfgProveedores = [];
 let cfgUnidades    = [];
+let cfgImpresion   = null;
+
+const PRINT_DEFAULTS = {
+  venta:      { margen: '6', fuente: '9',   fuenteTotal:  '11' },
+  inventario: { margen: '6', fuente: '9',   fuenteStock:  '11' },
+  etiqueta:   { margen: '6', fuente: '13' },
+  caja:       { margen: '6', fuente: '7.5', fuenteMonto:  '9'  },
+};
+
+function getPrintCfg(tipo) {
+  const saved = cfgImpresion?.[tipo] ?? {};
+  return { ...PRINT_DEFAULTS[tipo], ...saved };
+}
+
+function _printHtml(html, delay = 250) {
+  let fr = document.getElementById('_print-frame');
+  if (!fr) {
+    fr = document.createElement('iframe');
+    fr.id = '_print-frame';
+    fr.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:200mm;height:200mm;border:0;';
+    document.body.appendChild(fr);
+  }
+  const doc = fr.contentDocument || fr.contentWindow.document;
+  doc.open();
+  doc.write(html);
+  doc.close();
+  setTimeout(() => fr.contentWindow.print(), delay);
+}
 
 /* ─── MAPEO MongoDB → UI ─── */
 function mapDoc(doc) {
@@ -52,6 +80,7 @@ async function fetchConfig() {
   cfgCategorias  = data.categorias  ?? [];
   cfgProveedores = data.proveedores ?? [];
   cfgUnidades    = data.unidades    ?? [];
+  cfgImpresion   = data.impresion   ?? null;
 }
 
 /* ─── NAVIGATION ─── */
@@ -350,6 +379,12 @@ function setMetodo(m, el) {
 }
 
 function imprimirTicket(venta) {
+  const cfg        = getPrintCfg('venta');
+  const margen     = cfg.margen;
+  const fuente     = cfg.fuente;
+  const fuenteTotal = cfg.fuenteTotal;
+  const bodyW      = (58 - margen * 2) + 'mm';
+
   const fecha    = new Date(venta.fecha);
   const fechaStr = fecha.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const horaStr  = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
@@ -374,8 +409,8 @@ function imprimirTicket(venta) {
 <title>${venta.folio}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-@page{size:58mm auto;margin:2mm 6mm;}
-body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;width:46mm;color:#000;}
+@page{size:58mm auto;margin:2mm ${margen}mm;}
+body{font-family:Arial,Helvetica,sans-serif;font-size:${fuente}pt;width:${bodyW};color:#000;}
 .c{text-align:center;}
 .neg{font-size:12pt;font-weight:700;letter-spacing:1px;}
 .row{display:flex;justify-content:space-between;margin:2px 0;}
@@ -384,7 +419,7 @@ body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;width:46mm;color:#000;
 .prod{margin:4px 0;}
 .pnombre{font-weight:700;}
 .pdet{display:flex;justify-content:space-between;padding-left:2mm;}
-.total{display:flex;justify-content:space-between;font-size:11pt;font-weight:700;margin:3px 0;}
+.total{display:flex;justify-content:space-between;font-size:${fuenteTotal}pt;font-weight:700;margin:3px 0;}
 </style></head><body>
 <div class="c neg">PUNTO DE VENTA</div>
 <div class="c">${fechaStr} &nbsp; ${horaStr}</div>
@@ -400,15 +435,7 @@ ${notaHtml}
 <div class="c" style="margin-top:6px;font-size:8pt;">¡Gracias por su compra!</div>
 </body></html>`;
 
-  const win = window.open('', '_blank', 'width=320,height=600,toolbar=0,scrollbars=0,status=0,menubar=0');
-  if (!win) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => {
-    win.print();
-    win.onafterprint = () => win.close();
-  }, 250);
+  _printHtml(html, 250);
 }
 
 async function processSale() {
@@ -630,6 +657,12 @@ function imprimirInventario() {
   const lista = [...(window._invAll ?? [])].sort((a, b) => a.stock - b.stock);
   if (!lista.length) { toast('⚠️ Sin productos para imprimir'); return; }
 
+  const cfg         = getPrintCfg('inventario');
+  const margen      = cfg.margen;
+  const fuente      = cfg.fuente;
+  const fuenteStock = cfg.fuenteStock;
+  const bodyW       = (58 - margen * 2) + 'mm';
+
   const fecha = new Date().toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   const filas = lista.map(p => `
@@ -645,8 +678,8 @@ function imprimirInventario() {
 <title>Inventario ${fecha}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-@page{size:58mm auto;margin:2mm 6mm;}
-body{font-family:Arial,Helvetica,sans-serif;font-size:9pt;width:46mm;color:#000;}
+@page{size:58mm auto;margin:2mm ${margen}mm;}
+body{font-family:Arial,Helvetica,sans-serif;font-size:${fuente}pt;width:${bodyW};color:#000;}
 .c{text-align:center;}
 .bold{font-weight:700;}
 .dash{border:none;border-top:1px dashed #000;margin:4px 0;}
@@ -655,9 +688,9 @@ table{width:100%;border-collapse:collapse;}
 th{font-size:8pt;text-transform:uppercase;border-bottom:1px solid #000;padding:3px 2px;text-align:left;}
 td{padding:4px 2px;vertical-align:middle;}
 .info{width:80%;}
-.pname{font-size:9pt;line-height:1.2;}
+.pname{font-size:${fuente}pt;line-height:1.2;}
 .psku{font-size:7.5pt;color:#444;margin-top:1px;}
-.num{text-align:right;font-size:11pt;white-space:nowrap;padding-right:2mm;}
+.num{text-align:right;font-size:${fuenteStock}pt;white-space:nowrap;padding-right:2mm;}
 tr + tr td{border-top:1px dotted #ccc;}
 </style></head><body>
 <div class="c bold" style="font-size:12pt;">INVENTARIO</div>
@@ -671,57 +704,36 @@ tr + tr td{border-top:1px dotted #ccc;}
 <div class="c" style="font-size:8pt;">${lista.length} productos</div>
 </body></html>`;
 
-  const win = window.open('', '_blank', 'width=320,height=600,toolbar=0,scrollbars=0,status=0,menubar=0');
-  if (!win) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => {
-    win.print();
-    win.onafterprint = () => win.close();
-  }, 250);
+  _printHtml(html, 250);
 }
 
 function imprimirEtiqueta(sku, nombre) {
-  // Detectar formato: EAN-13 si son 13 dígitos, si no Code128
+  const cfg    = getPrintCfg('etiqueta');
+  const margen = cfg.margen;
+  const fuente = cfg.fuente;
+  const bodyW  = (58 - margen * 2) + 'mm';
+
+  // Generar SVG del código de barras en la ventana principal (JsBarcode ya cargado)
   const formato = /^\d{13}$/.test(sku) ? 'EAN13' : 'CODE128';
-  const nombreCorto = nombre;
+  const tmpSvg  = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  JsBarcode(tmpSvg, sku, { format: formato, width: 2, height: 50, fontSize: 10, margin: 4, displayValue: true, textMargin: 3 });
+  const svgHtml = tmpSvg.outerHTML;
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>Etiqueta ${sku}</title>
-<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"><\/script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-@page{size:58mm auto;margin:2mm 6mm;}
-body{width:46mm;font-family:Arial,Helvetica,sans-serif;padding:1mm 0;}
-.nombre{font-size:13pt;font-weight:700;text-align:center;width:100%;
+@page{size:58mm auto;margin:2mm ${margen}mm;}
+body{width:${bodyW};font-family:Arial,Helvetica,sans-serif;padding:1mm 0;}
+.nombre{font-size:${fuente}pt;font-weight:700;text-align:center;width:100%;
   word-break:break-word;line-height:1.3;margin-bottom:3mm;}
 svg{width:100%;display:block;}
 </style></head><body>
-<div class="nombre">${nombreCorto}</div>
-<svg id="bc"></svg>
-<script>
-  JsBarcode('#bc','${sku}',{
-    format:'${formato}',
-    width:2,
-    height:50,
-    fontSize:10,
-    margin:4,
-    displayValue:true,
-    textMargin:3
-  });
-<\/script>
+<div class="nombre">${nombre}</div>
+${svgHtml}
 </body></html>`;
 
-  const win = window.open('', '_blank', 'width=300,height=200,toolbar=0,scrollbars=0,status=0,menubar=0');
-  if (!win) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => {
-    win.print();
-    win.onafterprint = () => win.close();
-  }, 500);
+  _printHtml(html, 250);
 }
 
 /* ─── MODAL PRODUCTO ─── */
@@ -1300,6 +1312,58 @@ async function loadConfig() {
   renderCfgList('categorias');
   renderCfgList('proveedores');
   renderCfgList('unidades');
+  loadPrintConfig();
+}
+
+function loadPrintConfig() {
+  const campos = {
+    venta:      ['margen', 'fuente', 'fuenteTotal'],
+    inventario: ['margen', 'fuente', 'fuenteStock'],
+    etiqueta:   ['margen', 'fuente'],
+    caja:       ['margen', 'fuente', 'fuenteMonto'],
+  };
+  for (const [tipo, keys] of Object.entries(campos)) {
+    const cfg = getPrintCfg(tipo);
+    for (const key of keys) {
+      const el = document.getElementById(`pc-${tipo}-${key}`);
+      if (el) el.value = cfg[key] ?? '';
+    }
+  }
+}
+
+async function savePrintConfig() {
+  const tickets = {
+    venta: {
+      margen:      document.getElementById('pc-venta-margen')?.value      ?? PRINT_DEFAULTS.venta.margen,
+      fuente:      document.getElementById('pc-venta-fuente')?.value      ?? PRINT_DEFAULTS.venta.fuente,
+      fuenteTotal: document.getElementById('pc-venta-fuenteTotal')?.value ?? PRINT_DEFAULTS.venta.fuenteTotal,
+    },
+    inventario: {
+      margen:      document.getElementById('pc-inventario-margen')?.value      ?? PRINT_DEFAULTS.inventario.margen,
+      fuente:      document.getElementById('pc-inventario-fuente')?.value      ?? PRINT_DEFAULTS.inventario.fuente,
+      fuenteStock: document.getElementById('pc-inventario-fuenteStock')?.value ?? PRINT_DEFAULTS.inventario.fuenteStock,
+    },
+    etiqueta: {
+      margen: document.getElementById('pc-etiqueta-margen')?.value ?? PRINT_DEFAULTS.etiqueta.margen,
+      fuente: document.getElementById('pc-etiqueta-fuente')?.value ?? PRINT_DEFAULTS.etiqueta.fuente,
+    },
+    caja: {
+      margen:      document.getElementById('pc-caja-margen')?.value      ?? PRINT_DEFAULTS.caja.margen,
+      fuente:      document.getElementById('pc-caja-fuente')?.value      ?? PRINT_DEFAULTS.caja.fuente,
+      fuenteMonto: document.getElementById('pc-caja-fuenteMonto')?.value ?? PRINT_DEFAULTS.caja.fuenteMonto,
+    },
+  };
+  const res = await fetch(`${API}/config/impresion`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(tickets),
+  });
+  if (res.ok) {
+    cfgImpresion = tickets;
+    toast('✓ Configuración de impresión guardada');
+  } else {
+    toast('❌ Error al guardar configuración');
+  }
 }
 
 function cfgKey(tipo) {
@@ -2729,12 +2793,18 @@ function imprimirCajaReporte() {
     }
   }).join('');
 
+  const cfg         = getPrintCfg('caja');
+  const margen      = cfg.margen;
+  const fuente      = cfg.fuente;
+  const fuenteMonto = cfg.fuenteMonto;
+  const bodyW       = (58 - margen * 2) + 'mm';
+
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>Caja ${fechaFmt}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-@page{size:58mm auto;margin:2mm 6mm;}
-body{font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;width:46mm;color:#000;}
+@page{size:58mm auto;margin:2mm ${margen}mm;}
+body{font-family:Arial,Helvetica,sans-serif;font-size:${fuente}pt;width:${bodyW};color:#000;}
 .c{text-align:center;}
 .dash{border:none;border-top:1px dashed #000;margin:3px 0;}
 .solid{border:none;border-top:1.5px solid #000;margin:3px 0;}
@@ -2744,8 +2814,8 @@ td{padding:3px 2px;font-size:8pt;vertical-align:top;}
 td + td{border-top:none;}
 tr + tr td{border-top:1px dotted #ccc;}
 .hora{font-size:8pt;margin-top:1px;}
-.num{text-align:right;font-size:9pt;white-space:nowrap;padding-right:2mm;}
-.res{display:flex;justify-content:space-between;margin:1.5px 0;padding-right:2mm;}
+.num{text-align:right;font-size:${fuenteMonto}pt;white-space:nowrap;padding-right:2mm;}
+.res{display:flex;justify-content:space-between;margin:1.5px 0;padding-right:2mm;font-size:${fuenteMonto}pt;}
 .bold{font-weight:700;}
 </style></head><body>
 <div class="c bold" style="font-size:10pt;">REPORTE DE CAJA</div>
@@ -2763,13 +2833,5 @@ tr + tr td{border-top:1px dotted #ccc;}
 <div class="res bold"><span>BALANCE EN CAJA</span><span>${money(balance)}</span></div>
 </body></html>`;
 
-  const win = window.open('', '_blank', 'width=320,height=600,toolbar=0,scrollbars=0,status=0,menubar=0');
-  if (!win) { toast('⚠️ Permite las ventanas emergentes para imprimir'); return; }
-  win.document.write(html);
-  win.document.close();
-  win.focus();
-  setTimeout(() => {
-    win.print();
-    win.onafterprint = () => win.close();
-  }, 250);
+  _printHtml(html, 250);
 }
