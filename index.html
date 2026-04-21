@@ -970,7 +970,7 @@
           Precio de venta
           <span style="font-size:11px;color:var(--muted);font-weight:400;">Editable</span>
         </label>
-        <input class="granel-input editable" id="granel-total" type="number" min="0" step="0.01" placeholder="0.00">
+        <input class="granel-input editable" id="granel-total" type="number" min="0" step="0.01" placeholder="0.00" oninput="calcGranelPeso()">
         <span class="granel-hint" id="granel-calc-hint">Basado en precio × peso</span>
       </div>
     </div>

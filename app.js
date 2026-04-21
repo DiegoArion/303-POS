@@ -244,6 +244,20 @@ function closeGranel() {
   _granelProducto = null;
 }
 
+function calcGranelPeso() {
+  if (!_granelProducto) return;
+  const total = parseFloat(document.getElementById('granel-total').value);
+  if (isNaN(total) || total <= 0 || !_granelProducto.price) {
+    document.getElementById('granel-calc-hint').textContent = 'Basado en precio × peso';
+    return;
+  }
+  const pesoAprox = Math.round(total / _granelProducto.price * 10) / 10;
+  document.getElementById('granel-peso').value = pesoAprox;
+  const u = _granelProducto.unidad || 'unidad';
+  document.getElementById('granel-calc-hint').textContent =
+    `≈ ${pesoAprox} ${u} (${fmt(total)} ÷ ${fmt(_granelProducto.price)})`;
+}
+
 function calcGranel() {
   if (!_granelProducto) return;
   const peso = parseFloat(document.getElementById('granel-peso').value);
@@ -940,8 +954,11 @@ function handleOverlayClick(e) {
   if (e.target === document.getElementById('modal-overlay')) closeModal();
 }
 
-document.addEventListener('keydown', e => {
-  // Escape ya manejado en el listener del modal granel
+window.addEventListener('focus', () => {
+  const page = document.getElementById('page-inventariado');
+  if (!page?.classList.contains('active')) return;
+  if (document.querySelector('.granel-overlay.open')) return;
+  document.getElementById('inv-input')?.focus();
 });
 
 async function submitProducto(e) {
@@ -1642,6 +1659,7 @@ let _invCantidad   = 0;
 let _invCodigo     = '';
 let _invTipo       = null;     // 'parcial' | 'completo'
 let _invPendientes = [];       // productos pendientes (solo completo)
+let _invScanning   = false;    // guard contra scans concurrentes
 
 function initInventariado() {
   _invActual     = null;
@@ -1724,8 +1742,13 @@ function renderInvActual() {
 }
 
 async function handleInvScan(codigo) {
-  if (!codigo) return;
+  if (!codigo || _invScanning) return;
+  _invScanning = true;
   document.getElementById('inv-input').focus();
+  try { await _handleInvScan(codigo); } finally { _invScanning = false; }
+}
+
+async function _handleInvScan(codigo) {
 
   let producto = null;
   try {
@@ -2103,7 +2126,9 @@ async function openInvNew(codigo) {
     invNewOcultarStatus();
   }
 
-  setTimeout(() => document.getElementById('inv-new-nombre').focus(), 100);
+  if (document.getElementById('inv-new-overlay').classList.contains('open')) {
+    setTimeout(() => document.getElementById('inv-new-nombre').focus(), 100);
+  }
 }
 
 function closeInvNew() {
