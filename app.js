@@ -2500,7 +2500,7 @@ function pedAddRow() {
     </td>
     <td style="width:120px;">
       <input class="ped-input" type="number" min="0" step="0.01" placeholder="0.00"
-        id="ped-c-${id}" oninput="pedCalc(${id})">
+        id="ped-c-${id}" oninput="pedCalc(${id})" placeholder="Precio compra">
     </td>
     <td style="width:110px;">
       <span class="ped-sub" id="ped-s-${id}">$0.00</span>
@@ -2528,8 +2528,8 @@ async function pedBuscarNow(id) {
     if (!list.length) { ctr.innerHTML = ''; return; }
     ctr.innerHTML = `<div style="position:absolute;top:2px;left:0;right:0;background:var(--card);
       border:1.5px solid var(--primary);border-radius:8px;z-index:200;box-shadow:var(--shadow-md);overflow:hidden;">
-      ${list.map(p => `
-        <div onclick="pedSelectProducto(${id}, ${JSON.stringify(p)})"
+      ${list.map((p, i) => `
+        <div onclick="pedSelectProducto(${id}, _pedSugs[${id}][${i}])"
           style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);"
           onmouseover="this.style.background='var(--primary-light)'"
           onmouseout="this.style.background=''">
