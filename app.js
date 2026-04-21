@@ -1144,8 +1144,9 @@ document.getElementById('s-search').addEventListener('keydown', async e => {
   e.preventDefault();
   clearTimeout(salesDebounce);
   await loadSales();
+  if (!products.length) { toast('⚠️ Producto no encontrado'); return; }
+  if (products.length > 1) return;
   const p = products[0];
-  if (!p) { toast('⚠️ Producto no encontrado'); return; }
   if (ES_GRANEL_UNIDAD(p.unidad, p.cat)) {
     openGranel(p._id);
   } else {
