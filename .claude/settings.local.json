@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:go-upc.com)",
+      "Bash(grep -n \"collection\\\\|db\\\\\\\\.collection\" /c/Users/leand/OneDrive/Documentos/POS/303-POS/server.js)"
+    ]
+  }
+}

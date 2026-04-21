@@ -469,9 +469,11 @@
             <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:20px;">
               <div>
                 <div style="font-weight:600;font-size:13px;margin-bottom:10px;"><i class="fas fa-receipt" style="margin-right:5px;opacity:.6;"></i>Ticket de Venta</div>
+                <div class="field"><label>Ancho de papel (mm)</label><input type="number" id="pc-venta-ancho" min="40" max="120" step="1" style="width:80px;"></div>
                 <div class="field"><label>Margen lados (mm)</label><input type="number" id="pc-venta-margen" min="0" max="15" step="0.5" style="width:80px;"></div>
                 <div class="field"><label>Fuente productos (pt)</label><input type="number" id="pc-venta-fuente" min="5" max="18" step="0.5" style="width:80px;"></div>
                 <div class="field"><label>Fuente TOTAL (pt)</label><input type="number" id="pc-venta-fuenteTotal" min="5" max="20" step="0.5" style="width:80px;"></div>
+                <button onclick="imprimirEjemploVenta()" style="margin-top:8px;"><i class="fas fa-print"></i> Imprimir ejemplo</button>
               </div>
               <div>
                 <div style="font-weight:600;font-size:13px;margin-bottom:10px;"><i class="fas fa-boxes" style="margin-right:5px;opacity:.6;"></i>Inventario</div>
@@ -926,6 +928,23 @@
 
   </div><!-- /content -->
 </div><!-- /main -->
+
+<!-- ══════════════════ MODAL VISTA PREVIA TICKET ══════════════════ -->
+<div class="granel-overlay" id="ticket-preview-overlay" onclick="if(event.target===this)closeTicketPreview()">
+  <div class="granel-modal" style="width:320px;max-width:95vw;">
+    <div class="granel-head">
+      <span>Vista previa — Ticket de Venta</span>
+      <button class="btn-close" onclick="closeTicketPreview()"><i class="fas fa-times"></i></button>
+    </div>
+    <div style="padding:16px;display:flex;justify-content:center;background:#f0f0f0;">
+      <iframe id="ticket-preview-frame" style="width:220px;height:420px;border:1px solid #ccc;background:#fff;border-radius:4px;"></iframe>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px;">
+      <button class="btn-secondary" onclick="closeTicketPreview()">Cerrar</button>
+      <button class="btn-primary" onclick="imprimirDesdePrevia()"><i class="fas fa-print"></i> Imprimir</button>
+    </div>
+  </div>
+</div>
 
 <!-- ══════════════════ MODAL GRANEL ══════════════════ -->
 <div class="granel-overlay" id="granel-overlay" onclick="if(event.target===this)closeGranel()">

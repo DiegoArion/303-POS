@@ -15,7 +15,7 @@ let cfgUnidades    = [];
 let cfgImpresion   = null;
 
 const PRINT_DEFAULTS = {
-  venta:      { margen: '6', fuente: '9',   fuenteTotal:  '11' },
+  venta:      { ancho: '58', margen: '6', fuente: '9', fuenteTotal: '11' },
   inventario: { margen: '6', fuente: '9',   fuenteStock:  '11' },
   etiqueta:   { margen: '6', fuente: '13' },
   caja:       { margen: '6', fuente: '7.5', fuenteMonto:  '9'  },
@@ -378,21 +378,21 @@ function setMetodo(m, el) {
   el.classList.add('active');
 }
 
-function imprimirTicket(venta) {
-  const cfg        = getPrintCfg('venta');
-  const margen     = cfg.margen;
-  const fuente     = cfg.fuente;
+function buildTicketHtml(venta, cfg) {
+  cfg = cfg ?? getPrintCfg('venta');
+  const ancho       = Number(cfg.ancho)  || 58;
+  const margen      = Number(cfg.margen) || 0;
+  const fuente      = cfg.fuente;
   const fuenteTotal = cfg.fuenteTotal;
-  const bodyW      = (58 - margen * 2) + 'mm';
+  const money       = n => '$' + Number(n).toFixed(2);
 
   const fecha    = new Date(venta.fecha);
   const fechaStr = fecha.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const horaStr  = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
   const metodo   = venta.metodoPago === 'tarjeta' ? 'Tarjeta' : 'Efectivo';
-  const money    = n => '$' + Number(n).toFixed(2);
 
   const productosHtml = venta.productos.map(p => {
-    const nombre = p.nombre.length > 26 ? p.nombre.slice(0, 24) + '…' : p.nombre;
+    const nombre = p.nombre;
     const cant   = p.esGranel
       ? `${p.cantidad} ${p.unidad || 'kg'}`
       : `${p.cantidad}${p.unidad ? ' ' + p.unidad : ''} x ${money(p.pVenta)}`;
@@ -405,19 +405,19 @@ function imprimirTicket(venta) {
   const notaHtml = venta.nota
     ? `<hr class="dash"><div style="font-size:7.5pt;">Nota: ${venta.nota}</div>` : '';
 
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
+  return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <title>${venta.folio}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;}
-@page{size:58mm auto;margin:2mm ${margen}mm;}
-body{font-family:Arial,Helvetica,sans-serif;font-size:${fuente}pt;width:${bodyW};color:#000;}
+@page{size:${ancho}mm auto;margin:0;}
+body{font-family:Arial,Helvetica,sans-serif;font-size:${fuente}pt;width:${ancho}mm;padding:2mm ${margen}mm;color:#000;}
 .c{text-align:center;}
 .neg{font-size:12pt;font-weight:700;letter-spacing:1px;}
 .row{display:flex;justify-content:space-between;margin:2px 0;}
 .dash{border:none;border-top:1px dashed #000;margin:4px 0;}
 .solid{border:none;border-top:1.5px solid #000;margin:4px 0;}
 .prod{margin:4px 0;}
-.pnombre{font-weight:700;}
+.pnombre{font-weight:700;word-break:break-word;}
 .pdet{display:flex;justify-content:space-between;padding-left:2mm;}
 .total{display:flex;justify-content:space-between;font-size:${fuenteTotal}pt;font-weight:700;margin:3px 0;}
 </style></head><body>
@@ -434,8 +434,48 @@ ${productosHtml}
 ${notaHtml}
 <div class="c" style="margin-top:6px;font-size:8pt;">¡Gracias por su compra!</div>
 </body></html>`;
+}
 
-  _printHtml(html, 250);
+function imprimirTicket(venta) {
+  _printHtml(buildTicketHtml(venta), 250);
+}
+
+let _ventaEjemplo = null;
+
+async function imprimirEjemploVenta() {
+  try {
+    const res = await fetch('/api/ventas?limit=1&skip=0');
+    const data = await res.json();
+    const ventas = data.ventas ?? data;
+    if (!ventas.length) { alert('No hay ventas registradas para mostrar como ejemplo.'); return; }
+    _ventaEjemplo = ventas[0];
+    const cfg = {
+      ancho:       document.getElementById('pc-venta-ancho')?.value       ?? PRINT_DEFAULTS.venta.ancho,
+      margen:      document.getElementById('pc-venta-margen')?.value      ?? PRINT_DEFAULTS.venta.margen,
+      fuente:      document.getElementById('pc-venta-fuente')?.value      ?? PRINT_DEFAULTS.venta.fuente,
+      fuenteTotal: document.getElementById('pc-venta-fuenteTotal')?.value ?? PRINT_DEFAULTS.venta.fuenteTotal,
+    };
+    const html = buildTicketHtml(_ventaEjemplo, cfg);
+    const overlay = document.getElementById('ticket-preview-overlay');
+    const fr = document.getElementById('ticket-preview-frame');
+    const doc = fr.contentDocument || fr.contentWindow.document;
+    doc.open(); doc.write(html); doc.close();
+    setTimeout(() => {
+      const h = fr.contentDocument.body.scrollHeight;
+      if (h > 0) fr.style.height = (h + 16) + 'px';
+    }, 150);
+    overlay.classList.add('open');
+  } catch (e) {
+    alert('Error al cargar la vista previa.');
+  }
+}
+
+function closeTicketPreview() {
+  document.getElementById('ticket-preview-overlay').classList.remove('open');
+}
+
+function imprimirDesdePrevia() {
+  document.getElementById('ticket-preview-frame').contentWindow.print();
 }
 
 async function processSale() {
@@ -1317,7 +1357,7 @@ async function loadConfig() {
 
 function loadPrintConfig() {
   const campos = {
-    venta:      ['margen', 'fuente', 'fuenteTotal'],
+    venta:      ['ancho', 'margen', 'fuente', 'fuenteTotal'],
     inventario: ['margen', 'fuente', 'fuenteStock'],
     etiqueta:   ['margen', 'fuente'],
     caja:       ['margen', 'fuente', 'fuenteMonto'],
@@ -1334,6 +1374,7 @@ function loadPrintConfig() {
 async function savePrintConfig() {
   const tickets = {
     venta: {
+      ancho:       document.getElementById('pc-venta-ancho')?.value       ?? PRINT_DEFAULTS.venta.ancho,
       margen:      document.getElementById('pc-venta-margen')?.value      ?? PRINT_DEFAULTS.venta.margen,
       fuente:      document.getElementById('pc-venta-fuente')?.value      ?? PRINT_DEFAULTS.venta.fuente,
       fuenteTotal: document.getElementById('pc-venta-fuenteTotal')?.value ?? PRINT_DEFAULTS.venta.fuenteTotal,

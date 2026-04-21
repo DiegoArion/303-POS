@@ -203,6 +203,59 @@ app.put('/api/config/impresion', wrap(async (req, res) => {
   res.json({ ok: true, tickets });
 }));
 
+app.post('/api/print/ticket', wrap(async (req, res) => {
+  const venta = req.body;
+  const W = 32;
+  const money  = n => '$' + Number(n).toFixed(2);
+  const center = s => { const p = Math.max(0, Math.floor((W - s.length) / 2)); return ' '.repeat(p) + s; };
+  const lr     = (l, r) => { const sp = Math.max(1, W - l.length - r.length); return l + ' '.repeat(sp) + r; };
+  const dash   = '-'.repeat(W);
+
+  const fecha    = new Date(venta.fecha);
+  const fechaStr = fecha.toLocaleDateString('es-MX', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  const horaStr  = fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+  const metodo   = venta.metodoPago === 'tarjeta' ? 'Tarjeta' : 'Efectivo';
+
+  const rows = [
+    center('PUNTO DE VENTA'),
+    center(fechaStr + '  ' + horaStr),
+    dash,
+    lr('Folio:', venta.folio),
+    lr('Pago:', metodo),
+    dash,
+  ];
+
+  for (const p of venta.productos) {
+    const nombre = p.nombre.length > W ? p.nombre.slice(0, W - 1) + '…' : p.nombre;
+    const cant   = p.esGranel
+      ? `${p.cantidad} ${p.unidad || 'kg'}`
+      : `${p.cantidad}${p.unidad ? ' ' + p.unidad : ''} x ${money(p.pVenta)}`;
+    rows.push(nombre);
+    rows.push(lr('  ' + cant, money(p.subtotal)));
+  }
+
+  rows.push(dash);
+  rows.push(lr('TOTAL:', money(venta.total)));
+  rows.push(dash);
+  if (venta.nota) rows.push('Nota: ' + venta.nota);
+  rows.push('');
+  rows.push(center('¡Gracias por su compra!'));
+  rows.push('', '');
+
+  const content = rows.join('\r\n');
+  const tmpFile = path.join(require('os').tmpdir(), `ticket_${Date.now()}.txt`);
+  fs.writeFileSync(tmpFile, content, 'utf8');
+
+  try {
+    execSync(`powershell -command "Get-Content '${tmpFile}' | Out-Printer"`, { timeout: 10000 });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: 'Error al imprimir: ' + e.message });
+  } finally {
+    setTimeout(() => { try { fs.unlinkSync(tmpFile); } catch (_) {} }, 5000);
+  }
+}));
+
 app.put('/api/config/:tipo', wrap(async (req, res) => {
   const { tipo } = req.params;
   if (!['categorias', 'proveedores', 'unidades'].includes(tipo))
@@ -565,16 +618,16 @@ app.get('/api/inv-reportes/:id', wrap(async (req, res) => {
 }));
 
 // ── Búsqueda externa por código de barras ────────────────────────
-function fetchHtml(url, redireccion = 0) {
+const GO_UPC_API_KEY = '14fbb8c9a2ba84af4dbac5ca4ca6ee9bab5b13ee048d4b7b6bccf9a677335ae5';
+
+function fetchJson(url, headers = {}) {
   return new Promise((resolve, reject) => {
-    if (redireccion > 4) return reject(new Error('Demasiadas redirecciones'));
-    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, res => {
-      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return fetchHtml(res.headers.location, redireccion + 1).then(resolve).catch(reject);
-      }
+    https.get(url, { headers }, res => {
       let data = '';
       res.on('data', c => data += c);
-      res.on('end', () => resolve(data));
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); } catch (e) { reject(e); }
+      });
     }).on('error', reject);
   });
 }
@@ -596,20 +649,19 @@ function fetchBuffer(url) {
 app.get('/api/buscar-codigo/:codigo', wrap(async (req, res) => {
   const { codigo } = req.params;
   try {
-    const html = await fetchHtml(`https://go-upc.com/search?q=${encodeURIComponent(codigo)}`);
+    const data = await fetchJson(
+      `https://go-upc.com/api/v1/code/${encodeURIComponent(codigo)}?key=${GO_UPC_API_KEY}`
+    );
 
-    // Nombre: primer <h1>
-    const h1Match = html.match(/<h1[^>]*>([\s\S]*?)<\/h1>/i);
-    const nombre  = h1Match ? h1Match[1].replace(/<[^>]+>/g, '').trim() : null;
-
-    if (!nombre || /not found|sin resultado|no result/i.test(nombre)) {
+    const producto = data.product;
+    if (!producto || !producto.name) {
       return res.json({ encontrado: false });
     }
 
-    // Imagen: primer img apuntando a S3 de go-upc → guardar en disco
-    const imgMatch = html.match(/<img[^>]+src=["'](https:\/\/go-upc\.s3[^"']+)["']/i);
-    const imgUrl   = imgMatch ? imgMatch[1] : null;
+    const nombre = producto.name.trim();
+    const imgUrl = producto.imageUrl || null;
     let tieneImagen = false;
+
     if (imgUrl) {
       try {
         const buf = await fetchBuffer(imgUrl);
