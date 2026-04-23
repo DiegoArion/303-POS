@@ -5,6 +5,10 @@ Set shell = CreateObject("WScript.Shell")
 ' Ruta de la carpeta del proyecto
 ruta = CreateObject("Scripting.FileSystemObject").GetParentFolderName(WScript.ScriptFullName)
 
+' Cerrar instancias previas de node antes de iniciar
+shell.Run "cmd /c taskkill /F /IM node.exe >nul 2>&1", 0, True
+WScript.Sleep 1000
+
 ' Verificar que la rama activa sea PROD; si no, cambiar a ella
 Dim exec
 Set exec = shell.Exec("cmd /c cd /d """ & ruta & """ && git rev-parse --abbrev-ref HEAD")
@@ -22,6 +26,7 @@ End If
 shell.Run "cmd /c cd /d """ & ruta & """ && node updater.js > """ & ruta & "\servidor.log"" 2>&1", 0, False
 
 ' Iniciar sync con Atlas en segundo plano (sin ventana)
+shell.Environment("PROCESS")("DB_MODE") = "prod"
 shell.Run "cmd /c cd /d """ & ruta & """ && node sync.js > """ & ruta & "\sync.log"" 2>&1", 0, False
 
 ' Esperar a que el servidor responda (máximo 30 segundos)

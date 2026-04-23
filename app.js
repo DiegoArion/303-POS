@@ -27,18 +27,7 @@ function getPrintCfg(tipo) {
 }
 
 function _printHtml(html, delay = 250) {
-  let fr = document.getElementById('_print-frame');
-  if (!fr) {
-    fr = document.createElement('iframe');
-    fr.id = '_print-frame';
-    fr.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:200mm;height:200mm;border:0;';
-    document.body.appendChild(fr);
-  }
-  const doc = fr.contentDocument || fr.contentWindow.document;
-  doc.open();
-  doc.write(html);
-  doc.close();
-  setTimeout(() => fr.contentWindow.print(), delay);
+  // impresión desactivada temporalmente
 }
 
 /* ─── MAPEO MongoDB → UI ─── */
