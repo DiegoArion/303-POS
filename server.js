@@ -24,6 +24,14 @@ const localDate = () => new Date().toLocaleDateString('en-CA');
 // Envuelve handlers async — centraliza el try/catch
 const wrap = fn => (req, res) => fn(req, res).catch(err => res.status(500).json({ error: err.message }));
 
+// Convierte un string de búsqueda a regex que ignora acentos
+function accentRegex(q) {
+  const map = { a:'[aáàâäã]',e:'[eéèêë]',i:'[iíìîï]',o:'[oóòôöõ]',u:'[uúùûü]',n:'[nñ]',
+                á:'[aáàâäã]',é:'[eéèêë]',í:'[iíìîï]',ó:'[oóòôöõ]',ú:'[uúùûü]',ñ:'[nñ]' };
+  const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return escaped.toLowerCase().split('').map(c => map[c] || c).join('');
+}
+
 // Construye el documento de producto normalizado
 function buildProductDoc({ codigo, producto, pCosto, pVenta, stock, categoria, proveedor, unidad }) {
   const parseNum = (v, fn) => v !== undefined && v !== '' && v != null ? fn(Number(v)) : null;
@@ -92,11 +100,11 @@ app.get('/api/productos', wrap(async (req, res) => {
   const filtro = {};
   if (cat && cat !== 'Todos') filtro.categoria = { $regex: new RegExp(`^${cat}$`, 'i') };
   if (codigo) filtro.codigo = codigo;                          // búsqueda exacta por código
-  else if (q) filtro.$or = [
-    { producto:  { $regex: q, $options: 'i' } },
-    { codigo:    { $regex: q, $options: 'i' } },
-    { categoria: { $regex: q, $options: 'i' } },
-  ];
+  else if (q) { const r = accentRegex(q); filtro.$or = [
+    { producto:  { $regex: r, $options: 'i' } },
+    { codigo:    { $regex: r, $options: 'i' } },
+    { categoria: { $regex: r, $options: 'i' } },
+  ]; }
   res.json(await db.collection('productos').find(filtro).sort({ producto: 1 }).toArray());
 }));
 

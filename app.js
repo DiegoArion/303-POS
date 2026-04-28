@@ -115,6 +115,8 @@ document.querySelectorAll('.nav-item').forEach(el => {
 });
 
 /* ─── HELPERS ─── */
+const norm = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+
 function fmt(n) {
   if (n === null || n === undefined || isNaN(n)) return '$0.00';
   return '$' + Number(n).toFixed(2);
@@ -497,7 +499,7 @@ async function processSale() {
         productoId: it.esGranel ? it._baseId : it._id,
         codigo:    it.sku,
         nombre:    it.name,
-        pVenta:    it.esGranel ? it._precioBase : it.price,
+        pVenta:    it.esGranel ? it.price / it.peso : it.price,
         pCosto:    it.retail,
         cantidad:  it.esGranel ? it.peso : it.qty,
         unidad:    it.unidad || '',
@@ -590,11 +592,11 @@ async function loadInventory() {
 
 function filterInventory() {
   if (!window._invAll) return;
-  const q = document.getElementById('i-search').value.toLowerCase();
+  const q = norm(document.getElementById('i-search').value);
   const filtered = window._invAll.filter(p =>
-    p.name.toLowerCase().includes(q) ||
-    p.sku.toLowerCase().includes(q)  ||
-    p.cat.toLowerCase().includes(q)
+    norm(p.name).includes(q) ||
+    norm(p.sku).includes(q)  ||
+    norm(p.cat).includes(q)
   );
   renderInventoryTable(filtered);
 }
@@ -992,7 +994,7 @@ async function submitProducto(e) {
   } finally {
     btn.disabled = false;
     const txt = id ? 'Guardar cambios' : 'Agregar';
-    btn.innerHTML = `<i class="fas fa-${id ? 'floppy-disk' : 'plus'}"></i> <span>${txt}</span>`;
+    btn.innerHTML = `<i class="fas fa-${id ? 'floppy-disk' : 'plus'}"></i> <span id="btn-submit-txt">${txt}</span>`;
   }
 }
 
@@ -1831,9 +1833,9 @@ function renderInvPendientes() {
     return;
   }
 
-  const q     = (document.getElementById('inv-pendientes-search')?.value || '').toLowerCase();
+  const q     = norm(document.getElementById('inv-pendientes-search')?.value || '');
   const lista = q
-    ? _invPendientes.filter(p => p.producto.toLowerCase().includes(q) || (p.codigo || '').toLowerCase().includes(q))
+    ? _invPendientes.filter(p => norm(p.producto).includes(q) || norm(p.codigo).includes(q))
     : _invPendientes;
 
   countEl.textContent = `(${_invPendientes.length})`;
@@ -2646,10 +2648,10 @@ async function loadPedidos() {
 }
 
 function filtrarPedidos() {
-  const q = document.getElementById('pd-search').value.toLowerCase();
+  const q = norm(document.getElementById('pd-search').value);
   const filtered = _todosLosPedidos.filter(p =>
-    (p.proveedor || '').toLowerCase().includes(q) ||
-    (p.folio     || '').toLowerCase().includes(q)
+    norm(p.proveedor).includes(q) ||
+    norm(p.folio).includes(q)
   );
   renderPedidosTable(filtered);
 }
