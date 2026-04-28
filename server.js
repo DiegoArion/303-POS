@@ -51,7 +51,7 @@ function buildProductDoc({ codigo, producto, pCosto, pVenta, stock, categoria, p
 // Calcula ganancia de una venta
 const calcGanancia = venta =>
   venta.productos.reduce((s, p) =>
-    p.pCosto != null ? s + (p.pVenta - p.pCosto) * p.cantidad : s, 0);
+    (p.pCosto != null && p.pCosto > 0) ? s + (p.pVenta - p.pCosto) * p.cantidad : s, 0);
 
 // ── Auth ─────────────────────────────────────────────────────────
 const sessions = new Map(); // token → { username, tipo, _id }
