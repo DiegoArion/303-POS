@@ -32,6 +32,8 @@ function _printHtml(html, delay = 250) {
 
 /* ─── MAPEO MongoDB → UI ─── */
 function mapDoc(doc) {
+  // tags[] (nuevo) con fallback a categoria string (documentos viejos)
+  const tags = doc.tags?.length ? doc.tags : (doc.categoria ? [doc.categoria] : []);
   return {
     _id:       String(doc._id),
     sku:       doc.codigo    || '',
@@ -39,7 +41,7 @@ function mapDoc(doc) {
     price:     doc.pVenta    ?? 0,
     retail:    doc.pCosto    ?? 0,
     stock:     doc.stock     ?? 0,
-    cat:       doc.categoria || 'Sin categoría',
+    tags,
     proveedor: doc.proveedor || '',
     unidad:    doc.unidad   || '',
     ini:       (doc.producto || '?')[0].toUpperCase(),
@@ -193,7 +195,7 @@ function renderSalesGrid(list) {
 
   grid.innerHTML = list.map(p => {
     const out     = p.stock === 0;
-    const granel  = ES_GRANEL_UNIDAD(p.unidad, p.cat);
+    const granel  = ES_GRANEL_UNIDAD(p.unidad, p.tags);
     const lbl     = p.stock === 0 ? 'Sin stock' : p.stock <= 5 ? `Solo ${p.stock}` : `${p.stock} uds`;
     const bg      = p.stock===0?'var(--danger-bg)':p.stock<=5?'var(--warning-bg)':'var(--success-bg)';
     const cl      = p.stock===0?'var(--danger)':p.stock<=5?'var(--warning)':'var(--success)';
@@ -603,7 +605,7 @@ function filterInventory() {
   const filtered = window._invAll.filter(p =>
     norm(p.name).includes(q) ||
     norm(p.sku).includes(q)  ||
-    norm(p.cat).includes(q)
+    p.tags.some(t => norm(t).includes(q))
   );
   renderInventoryTable(filtered);
 }
@@ -632,8 +634,11 @@ function renderInventoryTable(list) {
         </td>
         <td style="color:var(--muted);font-family:monospace;font-size:12px;">${p.sku || '—'}</td>
         <td>
-          <span style="background:var(--primary-light);color:var(--primary-dark);
-            padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;">${p.cat}</span>
+          <div style="display:flex;flex-wrap:wrap;gap:4px;">
+            ${p.tags.length
+              ? p.tags.map(t => `<span style="background:var(--primary-light);color:var(--primary-dark);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;">${t}</span>`).join('')
+              : '<span style="color:var(--muted)">—</span>'}
+          </div>
         </td>
         <td style="color:var(--muted);font-size:13px;">${p.proveedor || '—'}</td>
         <td>${p.unidad
@@ -681,11 +686,11 @@ function descargarInventario() {
   const lista = [...(window._invAll ?? [])].sort((a, b) => a.stock - b.stock);
   if (!lista.length) { toast('⚠️ Sin productos para descargar'); return; }
 
-  const encabezado = ['Producto', 'SKU', 'Categoría', 'Proveedor', 'Unidad', 'Precio Costo', 'Precio Venta', 'Stock', 'Estado'];
+  const encabezado = ['Producto', 'SKU', 'Tags', 'Proveedor', 'Unidad', 'Precio Costo', 'Precio Venta', 'Stock', 'Estado'];
   const filas = lista.map(p => [
     p.name,
     p.sku   || '',
-    p.cat   || '',
+    p.tags.join(', '),
     p.proveedor || '',
     p.unidad    || '',
     p.retail != null ? p.retail : '',
@@ -897,8 +902,8 @@ async function buscarPorCodigoModal() {
 function openModal(id = null) {
   const overlay = document.getElementById('modal-overlay');
 
-  // Poblar selects
-  document.getElementById('f-categoria').innerHTML = catOptions();
+  // Poblar selects y tag picker
+  renderTagsPicker();
   document.getElementById('f-proveedor').innerHTML = provOptions();
   document.getElementById('f-unidad').innerHTML    = unidadOptions();
 
@@ -915,7 +920,7 @@ function openModal(id = null) {
     document.getElementById('f-id').value        = id;
     document.getElementById('f-nombre').value    = p.name;
     document.getElementById('f-codigo').value    = p.sku;
-    document.getElementById('f-categoria').innerHTML = catOptions(p.cat);
+    renderTagsPicker(p.tags ?? []);
     document.getElementById('f-proveedor').innerHTML = provOptions(p.proveedor ?? '');
     document.getElementById('f-unidad').innerHTML    = unidadOptions(p.unidad ?? '');
     document.getElementById('f-costo').value     = p.retail ?? '';
@@ -974,7 +979,7 @@ async function submitProducto(e) {
   const payload = {
     producto:  nombre,
     codigo:    document.getElementById('f-codigo').value.trim(),
-    categoria: document.getElementById('f-categoria').value,
+    tags:      getSelectedTags(),
     proveedor: document.getElementById('f-proveedor').value,
     unidad:    document.getElementById('f-unidad').value,
     pCosto:    document.getElementById('f-costo').value || null,
@@ -1204,7 +1209,7 @@ document.getElementById('s-search').addEventListener('keydown', async e => {
   if (!products.length) { toast('⚠️ Producto no encontrado'); return; }
   if (products.length > 1) return;
   const p = products[0];
-  if (ES_GRANEL_UNIDAD(p.unidad, p.cat)) {
+  if (ES_GRANEL_UNIDAD(p.unidad, p.tags)) {
     openGranel(p._id);
   } else {
     addToCart(p._id);
@@ -1221,10 +1226,73 @@ document.getElementById('p-search').addEventListener('input', () => {
 /* ─── AGREGAR PRODUCTOS (BULK) ─── */
 let bulkRowId = 0;
 
+// Select de un solo tag (para bulk y nuevo producto en inventariado)
 function catOptions(selected = '') {
-  const opts = cfgCategorias.length ? cfgCategorias : [];
-  return '<option value="">Sin categoría</option>' +
-    opts.map(c => `<option value="${c}"${c === selected ? ' selected' : ''}>${c}</option>`).join('');
+  return '<option value="">Sin tag</option>' +
+    cfgCategorias.map(c => `<option value="${c}"${c === selected ? ' selected' : ''}>${c}</option>`).join('');
+}
+
+// Tag picker con autocompletado — solo tags configurados
+function renderTagsPicker(selectedTags = []) {
+  const el = document.getElementById('f-tags');
+  if (!el) return;
+  el._sel = [...selectedTags];
+  _tpickRender(el);
+}
+
+function _tpickRender(el) {
+  const sel = el._sel;
+  const chips = sel.map((t, i) =>
+    `<span class="tpick-sel"><span>${t}</span><i class="fas fa-times" onclick="tpickRemove(${i})"></i></span>`
+  ).join('');
+  el.innerHTML = `
+    <div class="tpick-selected">${chips || ''}</div>
+    <div class="tpick-search-wrap">
+      <input class="tpick-input" id="tpick-input" type="text" placeholder="Buscar tag…"
+        autocomplete="off"
+        oninput="tpickFilter(this.value)"
+        onfocus="tpickFilter(this.value)"
+        onblur="setTimeout(tpickHideList,150)">
+      <div class="tpick-list" id="tpick-list"></div>
+    </div>`;
+}
+
+function tpickFilter(q) {
+  const el  = document.getElementById('f-tags');
+  const sel = el?._sel ?? [];
+  const available = cfgCategorias.filter(t =>
+    !sel.includes(t) && t.toLowerCase().includes(q.toLowerCase())
+  );
+  const list = document.getElementById('tpick-list');
+  if (!list) return;
+  if (!available.length) { list.innerHTML = ''; return; }
+  list.innerHTML = available.map(t =>
+    `<div class="tpick-item" onmousedown="tpickSelect('${t.replace(/'/g,"&#39;")}')">${t}</div>`
+  ).join('');
+}
+
+function tpickSelect(tag) {
+  const el = document.getElementById('f-tags');
+  if (!el || el._sel.includes(tag)) return;
+  el._sel.push(tag);
+  _tpickRender(el);
+  document.getElementById('tpick-input')?.focus();
+}
+
+function tpickRemove(idx) {
+  const el = document.getElementById('f-tags');
+  if (!el) return;
+  el._sel.splice(idx, 1);
+  _tpickRender(el);
+}
+
+function tpickHideList() {
+  const list = document.getElementById('tpick-list');
+  if (list) list.innerHTML = '';
+}
+
+function getSelectedTags() {
+  return document.getElementById('f-tags')?._sel ?? [];
 }
 
 function provOptions(selected = '') {
@@ -1237,14 +1305,14 @@ function unidadOptions(selected = '') {
     cfgUnidades.map(u => `<option value="${u}"${u === selected ? ' selected' : ''}>${u}</option>`).join('');
 }
 
-// Un producto se vende "a granel" si su unidad NO es "Unidad" y tiene unidad definida
-const ES_GRANEL_UNIDAD = (_u, cat) => !!cat && cat.toLowerCase().trim() === 'granel';
+const ES_GRANEL_UNIDAD = (_u, tags) =>
+  Array.isArray(tags) && tags.some(t => t.toLowerCase().trim() === 'granel');
 
 function getFirstRowValues() {
   const first = document.querySelector('#bulk-body tr');
   if (!first) return { categoria: '', proveedor: '', unidad: '' };
   return {
-    categoria: first.querySelector('[data-field="categoria"]')?.value ?? '',
+    categoria: first.querySelector('[data-field="tag"]')?.value ?? '',
     proveedor: first.querySelector('[data-field="proveedor"]')?.value ?? '',
     unidad:    first.querySelector('[data-field="unidad"]')?.value    ?? '',
   };
@@ -1297,7 +1365,7 @@ function bulkAddRow() {
         <i class="fas fa-circle-notch fa-spin"></i>
       </span>
     </td>
-    <td><select class="cell-select" data-field="categoria">${catOptions(categoria)}</select></td>
+    <td><select class="cell-select" data-field="tag">${catOptions(categoria)}</select></td>
     <td><select class="cell-select" data-field="proveedor">${provOptions(proveedor)}</select></td>
     <td><select class="cell-select" data-field="unidad">${unidadOptions(unidad)}</select></td>
     <td><input class="cell-input" type="number" placeholder="0.00" min="0" step="0.01" data-field="pCosto"></td>
@@ -1367,7 +1435,7 @@ async function bulkSubmit() {
     productos.push({
       producto:  nombre,
       codigo:    get('codigo'),
-      categoria: get('categoria'),
+      tags:      [get('tag')].filter(Boolean),
       proveedor: get('proveedor'),
       unidad:    get('unidad'),
       pCosto:    get('pCosto') || null,
@@ -1792,7 +1860,7 @@ function renderInvActual() {
   document.getElementById('inv-actual-codigo').textContent  = _invActual.codigo   || '—';
   document.getElementById('inv-actual-prov').textContent    = _invActual.proveedor || '—';
   document.getElementById('inv-actual-precio').textContent  = _invActual.pVenta != null ? fmt(_invActual.pVenta) : '—';
-  document.getElementById('inv-actual-cat').textContent     = _invActual.cat    || '—';
+  document.getElementById('inv-actual-cat').textContent     = _invActual.tags?.join(', ') || '—';
   document.getElementById('inv-actual-unidad').textContent  = _invActual.unidad || '—';
 
   document.getElementById('inv-stock-anterior').textContent = _invActual.stockAnterior ?? '—';
@@ -2206,7 +2274,7 @@ async function guardarInvNuevo() {
   try {
     const prod = await apiFetch('/productos', {
       method: 'POST',
-      body:   JSON.stringify({ codigo: _invCodigo, producto: nombre, pVenta, pCosto, categoria: cat, unidad, stock: 0 }),
+      body:   JSON.stringify({ codigo: _invCodigo, producto: nombre, pVenta, pCosto, tags: cat ? [cat] : [], unidad, stock: 0 }),
     });
     closeInvNew();
     toast('✅ Producto registrado');

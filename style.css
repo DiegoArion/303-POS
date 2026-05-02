@@ -627,6 +627,32 @@
     .tag-tarjeta   { background: var(--primary-light); color: var(--primary-dark); }
     .tag-cancelada { background: #FEE2E2; color: #DC2626; }
 
+    /* ── Tag picker (modal producto) ── */
+    .tpick-wrap { display: flex; flex-direction: column; gap: 6px; }
+    .tpick-selected { display: flex; flex-wrap: wrap; gap: 5px; min-height: 20px; align-items: center; }
+    .tpick-sel {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 600;
+      background: var(--primary-light); color: var(--primary-dark); border: 1.5px solid var(--primary);
+    }
+    .tpick-sel i { cursor: pointer; font-size: 10px; opacity: .6; transition: opacity .1s; }
+    .tpick-sel i:hover { opacity: 1; }
+    .tpick-search-wrap { position: relative; }
+    .tpick-input {
+      width: 100%; border: 1.5px solid var(--border); border-radius: 8px;
+      padding: 6px 10px; font-size: 13px; background: var(--bg); color: var(--text);
+      outline: none; font-family: inherit; box-sizing: border-box;
+    }
+    .tpick-input:focus { border-color: var(--primary); }
+    .tpick-list {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 300;
+      background: var(--card); border: 1.5px solid var(--border); border-radius: 8px;
+      box-shadow: 0 6px 20px rgba(0,0,0,.12); max-height: 180px; overflow-y: auto;
+    }
+    .tpick-list:empty { display: none; }
+    .tpick-item { padding: 8px 12px; cursor: pointer; font-size: 13px; transition: background .1s; }
+    .tpick-item:hover { background: var(--primary-light); color: var(--primary-dark); }
+
     tr.expandable { cursor: pointer; }
     tr.expandable:hover td { background: var(--primary-light) !important; }
 

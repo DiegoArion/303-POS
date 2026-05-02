@@ -297,7 +297,7 @@
           <table>
             <thead>
               <tr>
-                <th>Producto</th><th>SKU</th><th>Categoría</th><th>Proveedor</th>
+                <th>Producto</th><th>SKU</th><th>Tags</th><th>Proveedor</th>
                 <th>Unidad</th><th>Precio Retail</th><th>Precio Venta</th>
                 <th style="min-width:160px;">Stock</th><th>Estado</th>
               </tr>
@@ -385,7 +385,7 @@
                 <th style="width:36px;">#</th>
                 <th style="min-width:140px;">Código / SKU</th>
                 <th style="min-width:220px;">Nombre *</th>
-                <th style="min-width:150px;">Categoría</th>
+                <th style="min-width:150px;">Tag</th>
                 <th style="min-width:150px;">Proveedor</th>
                 <th style="min-width:110px;">Unidad</th>
                 <th style="min-width:110px;">P. Costo</th>
@@ -417,12 +417,12 @@
 
         <div class="config-card">
           <div class="config-card-head">
-            <div class="config-card-title"><i class="fas fa-tag"></i> Categorías</div>
+            <div class="config-card-title"><i class="fas fa-tag"></i> Tags</div>
             <span class="pill pill-info" id="cfg-cat-count">0</span>
           </div>
           <div class="config-card-body">
             <div class="config-add-row">
-              <input id="cfg-cat-input" type="text" placeholder="Nueva categoría…"
+              <input id="cfg-cat-input" type="text" placeholder="Nuevo tag…"
                 onkeydown="if(event.key==='Enter') cfgAdd('categorias')">
               <button onclick="cfgAdd('categorias')"><i class="fas fa-plus"></i> Agregar</button>
             </div>
@@ -823,7 +823,7 @@
                   <span id="inv-actual-precio" style="font-size:13px;">—</span>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
-                  <span style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;min-width:72px;">Categoría</span>
+                  <span style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;min-width:72px;">Tags</span>
                   <span id="inv-actual-cat" style="font-size:13px;">—</span>
                 </div>
                 <div style="display:flex;gap:8px;align-items:center;">
@@ -1038,9 +1038,9 @@
       </div>
 
       <div class="field-row">
-        <div class="field">
-          <label>Categoría</label>
-          <select id="f-categoria"></select>
+        <div class="field" style="grid-column:1/-1;">
+          <label>Tags</label>
+          <div id="f-tags" class="tpick-wrap"></div>
         </div>
         <div class="field">
           <label>Proveedor</label>

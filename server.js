@@ -33,15 +33,19 @@ function accentRegex(q) {
 }
 
 // Construye el documento de producto normalizado
-function buildProductDoc({ codigo, producto, pCosto, pVenta, stock, categoria, proveedor, unidad }) {
+function buildProductDoc({ codigo, producto, pCosto, pVenta, stock, tags, categoria, proveedor, unidad }) {
   const parseNum = (v, fn) => v !== undefined && v !== '' && v != null ? fn(Number(v)) : null;
+  // Acepta tags[] (nuevo) o categoria string (compat con imports/bulk viejos)
+  const tagsArr = Array.isArray(tags)
+    ? tags.map(t => String(t).trim()).filter(Boolean)
+    : (categoria ? [String(categoria).trim()].filter(Boolean) : []);
   return {
     codigo:        (codigo    ?? '').trim(),
     producto:      producto.trim(),
     pCosto:        parseNum(pCosto,  n => round2(n)),
     pVenta:        parseNum(pVenta,  n => round2(n)),
     stock:         parseNum(stock,   n => parseInt(n)) ?? 0,
-    categoria:     (categoria ?? '').trim(),
+    tags:          tagsArr,
     proveedor:     (proveedor ?? '').trim(),
     unidad:        (unidad    ?? '').trim(),
     actualizadoEn: new Date(),
@@ -98,11 +102,15 @@ app.use(express.json({ limit: '2mb' })); // base64 de uploads manuales (solo tr�
 app.get('/api/productos', wrap(async (req, res) => {
   const { q, cat, codigo } = req.query;
   const filtro = {};
-  if (cat && cat !== 'Todos') filtro.categoria = { $regex: new RegExp(`^${cat}$`, 'i') };
-  if (codigo) filtro.codigo = codigo;                          // búsqueda exacta por código
+  if (cat && cat !== 'Todos') filtro.$or = [
+    { tags:      cat },
+    { categoria: { $regex: new RegExp(`^${cat}$`, 'i') } }, // compat documentos viejos
+  ];
+  if (codigo) filtro.codigo = codigo;
   else if (q) { const r = accentRegex(q); filtro.$or = [
     { producto:  { $regex: r, $options: 'i' } },
     { codigo:    { $regex: r, $options: 'i' } },
+    { tags:      { $regex: r, $options: 'i' } },
     { categoria: { $regex: r, $options: 'i' } },
   ]; }
   res.json(await db.collection('productos').find(filtro).sort({ producto: 1 }).toArray());
@@ -186,8 +194,12 @@ app.post('/api/productos/bulk', wrap(async (req, res) => {
 
 // ── Categorías ───────────────────────────────────────────────────
 app.get('/api/categorias', wrap(async (_req, res) => {
-  const cats = await db.collection('productos').distinct('categoria');
-  res.json(cats.filter(Boolean).sort());
+  const [fromTags, fromCat] = await Promise.all([
+    db.collection('productos').distinct('tags'),
+    db.collection('productos').distinct('categoria'),
+  ]);
+  const all = [...new Set([...fromTags, ...fromCat])].filter(Boolean).sort();
+  res.json(all);
 }));
 
 // ── Config ───────────────────────────────────────────────────────
