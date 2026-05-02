@@ -13,6 +13,7 @@ let cfgCategorias  = [];
 let cfgProveedores = [];
 let cfgUnidades    = [];
 let cfgImpresion   = null;
+let ofertasHoy     = [];  // ofertas activas para hoy
 
 const PRINT_DEFAULTS = {
   venta:      { ancho: '58', margen: '6', fuente: '9', fuenteTotal: '11' },
@@ -74,6 +75,23 @@ async function fetchConfig() {
   cfgImpresion   = data.impresion   ?? null;
 }
 
+async function fetchOfertasHoy() {
+  try {
+    const res = await fetch(`${API}/ofertas/hoy`);
+    if (res.ok) ofertasHoy = await res.json();
+  } catch { ofertasHoy = []; }
+}
+
+// Retorna el mayor % de descuento aplicable a un producto según sus tags
+function getDescuento(tags) {
+  if (!ofertasHoy.length || !tags?.length) return 0;
+  let max = 0;
+  for (const o of ofertasHoy) {
+    if (o.tags.some(t => tags.includes(t))) max = Math.max(max, o.descuento);
+  }
+  return max;
+}
+
 /* ─── NAVIGATION ─── */
 const PAGE_META = {
   dashboard:    { title:'Dashboard',         sub:'Resumen del día y del mes' },
@@ -86,6 +104,7 @@ const PAGE_META = {
   pedidos:      { title:'Pedidos',           sub:'Historial de pedidos recibidos de proveedores' },
   usuarios:     { title:'Usuarios',           sub:'Gestiona los usuarios con acceso al sistema' },
   config:       { title:'Configuración',     sub:'Gestiona las categorías y proveedores disponibles' },
+  ofertas:      { title:'Ofertas',           sub:'Configura descuentos por tag y día de semana' },
   'caja-mov':     { title:'Mov. de Caja',    sub:'Registra entradas y salidas de efectivo' },
   'caja-reporte': { title:'Reporte de Caja', sub:'Movimientos de caja por día' },
   inventariado:   { title:'Inventariado',    sub:'Escanea productos para actualizar el stock' },
@@ -112,6 +131,7 @@ document.querySelectorAll('.nav-item').forEach(el => {
     if (page === 'caja-mov')     initCajaMov();
     if (page === 'caja-reporte') initCajaReporte();
     if (page === 'inventariado') initInventariado();
+    if (page === 'ofertas')      loadOfertas();
     if (page === 'inv-reporte')  { document.getElementById('inv-rep-mes').value = new Date().toISOString().slice(0,7); loadInvReporte(); }
   });
 });
@@ -202,11 +222,19 @@ function renderSalesGrid(list) {
     const action  = out ? '' : granel
       ? `onclick="openGranel('${p._id}')"`
       : `onclick="addToCart('${p._id}')"`;
+    const descPct = getDescuento(p.tags);
+    const precioDesc = descPct > 0
+      ? `<div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap;">
+           <s style="font-size:10px;color:var(--muted);font-weight:400;">${fmt(p.price)}</s>
+           <span style="font-weight:700;">${fmt(parseFloat((p.price*(1-descPct/100)).toFixed(2)))}</span>
+           <span class="badge-descuento">-${descPct}%</span>
+         </div>`
+      : `<div class="prod-price">${fmt(p.price)}${granel ? '<span style="font-size:10px;font-weight:400;color:var(--muted);"> /kg</span>' : ''}</div>`;
     return `
       <div class="prod-card${out ? ' out' : ''}" ${action}>
         ${avatarHtml(p.sku, p.ini, 44, 10)}
         <div class="prod-name">${p.name}</div>
-        <div class="prod-price">${fmt(p.price)}<span style="font-size:10px;font-weight:400;color:var(--muted);"> /kg</span></div>
+        ${precioDesc}
         ${granel ? '<span class="granel-tag"><i class="fas fa-weight-hanging"></i> Granel</span>' : ''}
         <span style="font-size:11px;padding:2px 7px;border-radius:4px;background:${bg};color:${cl};">${lbl}</span>
       </div>`;
@@ -274,16 +302,19 @@ function confirmGranel() {
   if (!total || total <= 0) { document.getElementById('granel-total').focus(); return; }
 
   // Cada entrada granel es única en el carrito (por peso + timestamp)
-  const uid = `${_granelProducto._id}_${Date.now()}`;
+  const uid     = `${_granelProducto._id}_${Date.now()}`;
+  const descPct = getDescuento(_granelProducto.tags);
+  const precioFinal = descPct > 0 ? parseFloat((total * (1 - descPct / 100)).toFixed(2)) : total;
   cart.push({
     ..._granelProducto,
-    _id:        uid,
-    _baseId:    _granelProducto._id,
-    esGranel:   true,
+    _id:         uid,
+    _baseId:     _granelProducto._id,
+    esGranel:    true,
     peso,
-    _precioBase: _granelProducto.price, // precio original por unidad
-    price:      total,                  // precio final de venta (editable)
-    qty:        1,
+    _precioBase: _granelProducto.price,
+    price:       precioFinal,
+    ...(descPct > 0 ? { _precioOriginal: total, _descuento: descPct } : {}),
+    qty:         1,
   });
 
   renderCart();
@@ -300,12 +331,20 @@ document.addEventListener('keydown', e => {
 
 /* ─── CART ─── */
 function addToCart(id) {
-  const p  = products.find(x => x._id === id);
+  const p = products.find(x => x._id === id);
   if (!p) return;
   const ex = cart.find(x => x._id === id);
-  if (ex) ex.qty++; else cart.push({...p, qty:1});
+  if (ex) { ex.qty++; renderCart(); toast(`✅ ${p.name} agregado`); return; }
+  const descPct = getDescuento(p.tags);
+  const item = { ...p, qty: 1 };
+  if (descPct > 0) {
+    item._precioOriginal = p.price;
+    item._descuento      = descPct;
+    item.price           = parseFloat((p.price * (1 - descPct / 100)).toFixed(2));
+  }
+  cart.push(item);
   renderCart();
-  toast(`✅ ${p.name} agregado`);
+  toast(`✅ ${p.name} agregado${descPct > 0 ? ` (-${descPct}%)` : ''}`);
 }
 
 function removeFromCart(id) { cart = cart.filter(x => x._id !== id); renderCart(); }
@@ -352,12 +391,15 @@ function renderCart() {
           <button class="btn-rm" onclick="removeFromCart('${it._id}')"><i class="fas fa-times"></i></button>
         </div>`;
     }
+    const precioUnit = it._descuento
+      ? `<s style="color:var(--muted);font-size:11px;">${fmt(it._precioOriginal)}</s> ${fmt(it.price)} <span class="badge-descuento">-${it._descuento}%</span>`
+      : `${fmt(it.price)} c/u`;
     return `
       <div class="cart-item">
         ${avatarHtml(it.sku, it.ini, 30, 7)}
         <div class="ci-info">
           <div class="ci-name">${it.name}</div>
-          <div class="ci-unit">${fmt(it.price)} c/u</div>
+          <div class="ci-unit">${precioUnit}</div>
         </div>
         <div class="qty-ctrl">
           <button class="qty-btn" onclick="changeQty('${it._id}',-1)">−</button>
@@ -511,7 +553,11 @@ async function processSale() {
         pCosto:    it.retail,
         cantidad:  it.esGranel ? it.peso : it.qty,
         unidad:    it.unidad || '',
-        ...(it.esGranel ? { esGranel: true } : {}),
+        ...(it.esGranel  ? { esGranel: true } : {}),
+        ...(it._descuento ? {
+          descuento:       it._descuento,
+          pVentaOriginal:  it.esGranel ? it._precioOriginal / it.peso : it._precioOriginal,
+        } : {}),
       })),
     };
 
@@ -647,7 +693,13 @@ function renderInventoryTable(list) {
               color:var(--text);">${p.unidad}</span>`
           : '<span style="color:var(--muted);">—</span>'}</td>
         <td style="color:var(--muted);">${p.retail !== null ? fmt(p.retail) : '—'}</td>
-        <td style="font-weight:700;">${fmt(p.price)}</td>
+        <td style="font-weight:700;">
+          ${(() => { const d = getDescuento(p.tags); return d > 0
+            ? `<s style="color:var(--muted);font-weight:400;font-size:12px;">${fmt(p.price)}</s>
+               <span style="display:block;">${fmt(parseFloat((p.price*(1-d/100)).toFixed(2)))}
+               <span class="badge-descuento" style="font-size:10px;">-${d}%</span></span>`
+            : fmt(p.price); })()}
+        </td>
         <td>
           <div class="stock-bar-wrap">
             <div class="stock-bar">
@@ -1070,10 +1122,16 @@ function renderVentasTable(ventas) {
     const rowStyle = esCancelada ? 'opacity:.55;' : '';
 
     const detalle = v.productos.map(p => {
-      const unid = p.unidad || (p.esGranel ? 'u.' : 'pza');
+      const unid     = p.unidad || (p.esGranel ? 'u.' : 'pza');
+      const descBadge = p.descuento
+        ? ` <span class="badge-descuento" style="font-size:10px;">-${p.descuento}%</span>`
+        : '';
+      const precioCell = p.descuento
+        ? `<s style="font-size:11px;color:var(--muted);">${fmt(p.pVentaOriginal)}</s> ${fmt(p.pVenta)}`
+        : `${fmt(p.pVenta)} / ${unid}`;
       return `<div class="venta-prod-item" ${esCancelada ? 'style="text-decoration:line-through;opacity:.7;"' : ''}>
-        <span style="flex:1;">${p.nombre}</span>
-        <span style="color:var(--muted);font-size:12px;min-width:80px;text-align:right;">${fmt(p.pVenta)} / ${unid}</span>
+        <span style="flex:1;">${p.nombre}${descBadge}</span>
+        <span style="color:var(--muted);font-size:12px;min-width:80px;text-align:right;">${precioCell}</span>
         <span style="color:var(--muted);font-size:12px;min-width:60px;text-align:right;">× ${p.cantidad} ${unid}</span>
         <span style="font-weight:600;min-width:72px;text-align:right;">${fmt(p.subtotal)}</span>
       </div>`;
@@ -1640,10 +1698,11 @@ function updateClock() {
   updateClock();
   setInterval(updateClock, 30000);
 
-  // Cargar config (categorías/proveedores) y tabs en paralelo
+  // Cargar config, categorías y ofertas de hoy en paralelo
   await Promise.all([
     fetchConfig(),
     fetchCategorias().then(c => { cats = c; }).catch(() => {}),
+    fetchOfertasHoy(),
   ]);
 
   buildTabs('s-tabs', 'Todos', 'setScat');
@@ -1670,6 +1729,128 @@ function initBulkPage() {
     });
   }
   hideBanner();
+}
+
+/* ─── OFERTAS ─── */
+let _ofertaEditId = null;
+
+const DIAS_NOMBRES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+async function loadOfertas() {
+  try {
+    const res = await fetch(`${API}/ofertas`);
+    window._ofertasList = await res.json();
+    renderOfertasList();
+  } catch { toast('❌ Error cargando ofertas'); }
+  renderOfertaTagsForm();
+}
+
+function renderOfertaTagsForm() {
+  const wrap = document.getElementById('oferta-tags-checks');
+  if (!wrap) return;
+  wrap.innerHTML = cfgCategorias.length
+    ? cfgCategorias.map(t => `
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding:3px 0;">
+          <input type="checkbox" class="oferta-tag-check" value="${t.replace(/"/g,'&quot;')}" style="accent-color:var(--primary);">
+          <span>${t}</span>
+        </label>`).join('')
+    : '<span style="color:var(--muted);font-size:13px;">Sin tags configurados</span>';
+}
+
+function renderOfertasList() {
+  const list = window._ofertasList ?? [];
+  const body = document.getElementById('ofertas-list-body');
+  if (!body) return;
+
+  if (!list.length) {
+    body.innerHTML = '<tr><td colspan="5" class="empty" style="padding:30px;">Sin ofertas configuradas</td></tr>';
+    return;
+  }
+
+  body.innerHTML = list.map(o => {
+    const diasStr = o.dias.sort((a,b)=>a-b).map(d => DIAS_NOMBRES[d]).join(', ');
+    const tagsStr = o.tags.join(', ');
+    return `
+      <tr>
+        <td style="font-weight:600;">${o.nombre}</td>
+        <td>${tagsStr}</td>
+        <td style="text-align:center;"><span class="badge-descuento">${o.descuento}%</span></td>
+        <td style="color:var(--muted);font-size:13px;">${diasStr}</td>
+        <td style="display:flex;gap:6px;align-items:center;">
+          <button onclick="editarOferta('${o._id}')"
+            style="border:none;background:var(--primary-light);color:var(--primary-dark);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">
+            <i class="fas fa-pen"></i>
+          </button>
+          <button onclick="eliminarOferta('${o._id}','${o.nombre.replace(/'/g,"&#39;")}')"
+            style="border:none;background:var(--danger-bg);color:var(--danger);border-radius:6px;padding:4px 9px;font-size:12px;cursor:pointer;">
+            <i class="fas fa-trash"></i>
+          </button>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+function _ofertaFormReset() {
+  _ofertaEditId = null;
+  document.getElementById('oferta-form-title').textContent = 'Nueva oferta';
+  document.getElementById('oferta-nombre').value    = '';
+  document.getElementById('oferta-descuento').value = '';
+  document.querySelectorAll('.oferta-tag-check').forEach(c => c.checked = false);
+  document.querySelectorAll('.oferta-dia-check').forEach(c => c.checked = false);
+  document.getElementById('oferta-btn-cancel').style.display = 'none';
+}
+
+async function guardarOferta() {
+  const nombre    = document.getElementById('oferta-nombre').value.trim();
+  const descuento = Number(document.getElementById('oferta-descuento').value);
+  const tags      = [...document.querySelectorAll('.oferta-tag-check:checked')].map(c => c.value);
+  const dias      = [...document.querySelectorAll('.oferta-dia-check:checked')].map(c => Number(c.value));
+
+  if (!nombre)      { toast('⚠️ Ingresa un nombre'); return; }
+  if (!tags.length) { toast('⚠️ Selecciona al menos un tag'); return; }
+  if (!descuento || descuento <= 0 || descuento > 100) { toast('⚠️ Descuento inválido (1–100%)'); return; }
+  if (!dias.length) { toast('⚠️ Selecciona al menos un día'); return; }
+
+  const body   = JSON.stringify({ nombre, tags, descuento, dias });
+  const url    = _ofertaEditId ? `${API}/ofertas/${_ofertaEditId}` : `${API}/ofertas`;
+  const method = _ofertaEditId ? 'PUT' : 'POST';
+
+  try {
+    const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body });
+    if (!res.ok) throw new Error((await res.json()).error);
+    toast(_ofertaEditId ? '✅ Oferta actualizada' : '✅ Oferta creada');
+    _ofertaFormReset();
+    await loadOfertas();
+    await fetchOfertasHoy();
+    renderSalesGrid(products);
+    if (window._invAll) renderInventoryTable(window._invAll);
+  } catch (err) { toast(`❌ ${err.message}`); }
+}
+
+function editarOferta(id) {
+  const o = (window._ofertasList ?? []).find(x => String(x._id) === id);
+  if (!o) return;
+  _ofertaEditId = id;
+  document.getElementById('oferta-form-title').textContent = 'Editar oferta';
+  document.getElementById('oferta-nombre').value    = o.nombre;
+  document.getElementById('oferta-descuento').value = o.descuento;
+  document.querySelectorAll('.oferta-tag-check').forEach(c => { c.checked = o.tags.includes(c.value); });
+  document.querySelectorAll('.oferta-dia-check').forEach(c => { c.checked = o.dias.includes(Number(c.value)); });
+  document.getElementById('oferta-btn-cancel').style.display = '';
+  document.getElementById('oferta-nombre').focus();
+}
+
+async function eliminarOferta(id, nombre) {
+  if (!confirm(`¿Eliminar la oferta "${nombre}"?`)) return;
+  try {
+    const res = await fetch(`${API}/ofertas/${id}`, { method: 'DELETE' });
+    if (!res.ok) throw new Error((await res.json()).error);
+    toast(`🗑 Oferta eliminada`);
+    await loadOfertas();
+    await fetchOfertasHoy();
+    renderSalesGrid(products);
+    if (window._invAll) renderInventoryTable(window._invAll);
+  } catch (err) { toast(`❌ ${err.message}`); }
 }
 
 /* ─── AUTH ─── */

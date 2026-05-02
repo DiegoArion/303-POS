@@ -306,7 +306,8 @@ app.post('/api/ventas', wrap(async (req, res) => {
       pCosto:   p.pCosto ?? null,
       cantidad: p.cantidad,
       unidad:   p.unidad  || '',
-      ...(p.esGranel ? { esGranel: true } : {}),
+      ...(p.esGranel  ? { esGranel: true } : {}),
+      ...(p.descuento ? { descuento: Number(p.descuento), pVentaOriginal: Number(p.pVentaOriginal) } : {}),
       subtotal: round2(p.pVenta * p.cantidad),
     })),
     numProductos: productos.reduce((s, p) => s + p.cantidad, 0),
@@ -762,6 +763,61 @@ app.post('/api/version/rollback', wrap(async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+}));
+
+// ── Ofertas ──────────────────────────────────────────────────────
+app.get('/api/ofertas', wrap(async (_req, res) => {
+  res.json(await db.collection('ofertas').find({}).sort({ nombre: 1 }).toArray());
+}));
+
+app.get('/api/ofertas/hoy', wrap(async (_req, res) => {
+  const dia = new Date().getDay(); // 0=Dom … 6=Sáb
+  res.json(await db.collection('ofertas').find({ dias: dia }).toArray());
+}));
+
+app.post('/api/ofertas', wrap(async (req, res) => {
+  const { nombre, tags, descuento, dias } = req.body;
+  if (!nombre?.trim())                              return res.status(400).json({ error: 'El nombre es requerido' });
+  if (!Array.isArray(tags) || !tags.length)         return res.status(400).json({ error: 'Selecciona al menos un tag' });
+  if (!descuento || descuento <= 0 || descuento > 100) return res.status(400).json({ error: 'Descuento inválido (1–100%)' });
+  if (!Array.isArray(dias) || !dias.length)         return res.status(400).json({ error: 'Selecciona al menos un día' });
+
+  const doc = {
+    nombre:    nombre.trim(),
+    tags:      tags.map(t => String(t).trim()).filter(Boolean),
+    descuento: Number(descuento),
+    dias:      dias.map(Number),
+    creadoEn:  new Date(),
+  };
+  const result = await db.collection('ofertas').insertOne(doc);
+  res.status(201).json({ ...doc, _id: result.insertedId });
+}));
+
+app.put('/api/ofertas/:id', wrap(async (req, res) => {
+  const { nombre, tags, descuento, dias } = req.body;
+  if (!nombre?.trim())                              return res.status(400).json({ error: 'El nombre es requerido' });
+  if (!Array.isArray(tags) || !tags.length)         return res.status(400).json({ error: 'Selecciona al menos un tag' });
+  if (!descuento || descuento <= 0 || descuento > 100) return res.status(400).json({ error: 'Descuento inválido (1–100%)' });
+  if (!Array.isArray(dias) || !dias.length)         return res.status(400).json({ error: 'Selecciona al menos un día' });
+
+  const update = {
+    nombre:        nombre.trim(),
+    tags:          tags.map(t => String(t).trim()).filter(Boolean),
+    descuento:     Number(descuento),
+    dias:          dias.map(Number),
+    actualizadoEn: new Date(),
+  };
+  const result = await db.collection('ofertas').updateOne(
+    { _id: ObjectId.createFromHexString(req.params.id) }, { $set: update }
+  );
+  if (result.matchedCount === 0) return res.status(404).json({ error: 'Oferta no encontrada' });
+  res.json({ _id: req.params.id, ...update });
+}));
+
+app.delete('/api/ofertas/:id', wrap(async (req, res) => {
+  const result = await db.collection('ofertas').deleteOne({ _id: ObjectId.createFromHexString(req.params.id) });
+  if (result.deletedCount === 0) return res.status(404).json({ error: 'Oferta no encontrada' });
+  res.json({ ok: true });
 }));
 
 // ── Estáticos y arranque ─────────────────────────────────────────
