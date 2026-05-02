@@ -1058,12 +1058,14 @@ function renderVentasTable(ventas) {
     const fecha = new Date(v.fecha);
     const fStr  = fecha.toLocaleDateString('es-MX', { day:'2-digit', month:'short', year:'numeric' });
     const hStr  = fecha.toLocaleTimeString('es-MX', { hour:'2-digit', minute:'2-digit' });
-    const cls   = v.metodoPago === 'tarjeta' ? 'tag-tarjeta' : 'tag-efectivo';
-    const ico   = v.metodoPago === 'tarjeta' ? 'fa-credit-card' : 'fa-money-bill-wave';
+    const esCancelada = v.cancelada === true;
+    const cls   = esCancelada ? 'tag-cancelada' : (v.metodoPago === 'tarjeta' ? 'tag-tarjeta' : 'tag-efectivo');
+    const ico   = esCancelada ? 'fa-ban' : (v.metodoPago === 'tarjeta' ? 'fa-credit-card' : 'fa-money-bill-wave');
+    const rowStyle = esCancelada ? 'opacity:.55;' : '';
 
     const detalle = v.productos.map(p => {
       const unid = p.unidad || (p.esGranel ? 'u.' : 'pza');
-      return `<div class="venta-prod-item">
+      return `<div class="venta-prod-item" ${esCancelada ? 'style="text-decoration:line-through;opacity:.7;"' : ''}>
         <span style="flex:1;">${p.nombre}</span>
         <span style="color:var(--muted);font-size:12px;min-width:80px;text-align:right;">${fmt(p.pVenta)} / ${unid}</span>
         <span style="color:var(--muted);font-size:12px;min-width:60px;text-align:right;">× ${p.cantidad} ${unid}</span>
@@ -1071,19 +1073,46 @@ function renderVentasTable(ventas) {
       </div>`;
     }).join('');
 
+    const accionesHtml = esCancelada
+      ? `<div style="font-size:12px;color:var(--danger);font-weight:600;padding:6px 0;">
+           <i class="fas fa-ban"></i> Cancelada el ${new Date(v.canceladaEn).toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})}
+         </div>`
+      : `<div style="margin-top:10px;display:flex;align-items:flex-start;gap:8px;">
+           <textarea id="nota-${v._id}" rows="2"
+             placeholder="Agregar nota…"
+             style="flex:1;resize:none;border:1.5px solid var(--border);border-radius:8px;
+               padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg);
+               color:var(--text);outline:none;"
+             onfocus="this.style.borderColor='var(--primary)'"
+             onblur="this.style.borderColor='var(--border)'"
+           >${v.nota ?? ''}</textarea>
+           <button onclick="guardarNota('${v._id}')"
+             style="border:none;background:var(--primary);color:#fff;border-radius:8px;
+               padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap;align-self:flex-end;">
+             <i class="fas fa-save"></i> Guardar
+           </button>
+         </div>
+         <div id="cancel-area-${v._id}" style="margin-top:8px;">
+           <button onclick="iniciarCancelacion('${v._id}')"
+             style="border:1.5px solid var(--danger);background:transparent;color:var(--danger);
+               border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;">
+             <i class="fas fa-ban"></i> Cancelar venta
+           </button>
+         </div>`;
+
     return `
-      <tr class="expandable" onclick="toggleDetalle('${v._id}')">
+      <tr class="expandable" onclick="toggleDetalle('${v._id}')" style="${rowStyle}">
         <td style="color:var(--muted);font-size:12px;">
           <i class="fas fa-chevron-right" id="ico-${v._id}" style="transition:transform .2s;"></i>
         </td>
-        <td style="font-family:monospace;font-weight:600;font-size:13px;">${v.folio}</td>
+        <td style="font-family:monospace;font-weight:600;font-size:13px;${esCancelada?'text-decoration:line-through;':''}">${v.folio}</td>
         <td>${fStr}</td>
         <td style="color:var(--muted);">${hStr}</td>
         <td style="text-align:center;">${v.numProductos} pza${v.numProductos !== 1 ? 's' : ''}</td>
-        <td style="font-weight:700;">${fmt(v.total)}</td>
+        <td style="font-weight:700;${esCancelada?'text-decoration:line-through;':''}">${fmt(v.total)}</td>
         <td>
           <span class="tag-metodo ${cls}">
-            <i class="fas ${ico}"></i> ${v.metodoPago === 'tarjeta' ? 'Tarjeta' : 'Efectivo'}
+            <i class="fas ${ico}"></i> ${esCancelada ? 'Cancelada' : (v.metodoPago === 'tarjeta' ? 'Tarjeta' : 'Efectivo')}
           </span>
         </td>
       </tr>
@@ -1094,25 +1123,55 @@ function renderVentasTable(ventas) {
               PRODUCTOS DE LA VENTA
             </div>
             <div class="venta-prod-list">${detalle}</div>
-            <div style="margin-top:10px;display:flex;align-items:flex-start;gap:8px;">
-              <textarea id="nota-${v._id}" rows="2"
-                placeholder="Agregar nota…"
-                style="flex:1;resize:none;border:1.5px solid var(--border);border-radius:8px;
-                  padding:6px 10px;font-size:12px;font-family:inherit;background:var(--bg);
-                  color:var(--text);outline:none;"
-                onfocus="this.style.borderColor='var(--primary)'"
-                onblur="this.style.borderColor='var(--border)'"
-              >${v.nota ?? ''}</textarea>
-              <button onclick="guardarNota('${v._id}')"
-                style="border:none;background:var(--primary);color:#fff;border-radius:8px;
-                  padding:6px 12px;font-size:12px;cursor:pointer;white-space:nowrap;align-self:flex-end;">
-                <i class="fas fa-save"></i> Guardar
-              </button>
-            </div>
+            ${accionesHtml}
           </div>
         </td>
       </tr>`;
   }).join('');
+}
+
+function iniciarCancelacion(id) {
+  document.getElementById(`cancel-area-${id}`).innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;
+      background:#FEF2F2;border:1.5px solid var(--danger);">
+      <span style="font-size:12px;color:var(--danger);font-weight:600;">
+        <i class="fas fa-triangle-exclamation"></i> ¿Cancelar esta venta? Se restaurará el stock.
+      </span>
+      <button onclick="confirmarCancelacion('${id}')"
+        style="border:none;background:var(--danger);color:#fff;border-radius:6px;
+          padding:4px 10px;font-size:12px;cursor:pointer;white-space:nowrap;">
+        Sí, cancelar
+      </button>
+      <button onclick="abortarCancelacion('${id}')"
+        style="border:1.5px solid var(--border);background:transparent;color:var(--text);
+          border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;white-space:nowrap;">
+        No
+      </button>
+    </div>`;
+}
+
+function abortarCancelacion(id) {
+  document.getElementById(`cancel-area-${id}`).innerHTML = `
+    <button onclick="iniciarCancelacion('${id}')"
+      style="border:1.5px solid var(--danger);background:transparent;color:var(--danger);
+        border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer;">
+      <i class="fas fa-ban"></i> Cancelar venta
+    </button>`;
+}
+
+async function confirmarCancelacion(id) {
+  try {
+    const res = await fetch(`${API}/ventas/${id}/cancelar`, { method: 'POST' });
+    if (!res.ok) throw new Error((await res.json()).error);
+    toast('✅ Venta cancelada — stock restaurado');
+    await Promise.all([
+      loadVentas(),
+      loadSales(),
+      loadInventory(),
+    ]);
+  } catch (err) {
+    toast(`❌ ${err.message}`);
+  }
 }
 
 async function guardarNota(id) {

@@ -321,6 +321,29 @@ app.post('/api/ventas', wrap(async (req, res) => {
   res.status(201).json({ ...venta, _id: result.insertedId });
 }));
 
+app.post('/api/ventas/:id/cancelar', wrap(async (req, res) => {
+  const oid   = ObjectId.createFromHexString(req.params.id);
+  const venta = await db.collection('ventas').findOne({ _id: oid });
+  if (!venta)          return res.status(404).json({ error: 'Venta no encontrada' });
+  if (venta.cancelada) return res.status(400).json({ error: 'La venta ya está cancelada' });
+
+  // Restaurar stock: buscar por codigo si existe, si no por nombre
+  const stockOps = venta.productos.map(p => ({
+    updateOne: {
+      filter: p.codigo ? { codigo: p.codigo } : { producto: p.nombre },
+      update: { $inc: { stock: p.cantidad }, $set: { actualizadoEn: new Date() } },
+    },
+  }));
+  if (stockOps.length) await db.collection('productos').bulkWrite(stockOps);
+
+  await db.collection('ventas').updateOne(
+    { _id: oid },
+    { $set: { cancelada: true, canceladaEn: new Date() } }
+  );
+
+  res.json({ ok: true });
+}));
+
 app.patch('/api/ventas/:id/nota', wrap(async (req, res) => {
   const nota   = (req.body.nota ?? '').trim();
   const result = await db.collection('ventas').updateOne(
@@ -472,7 +495,7 @@ app.get('/api/caja', wrap(async (req, res) => {
   const [movimientos, ventas] = await Promise.all([
     db.collection('caja').find({ fecha }).sort({ creadoEn: 1 }).toArray(),
     db.collection('ventas').find(
-      { fecha: { $gte: inicio, $lte: fin }, metodoPago: 'efectivo' },
+      { fecha: { $gte: inicio, $lte: fin }, metodoPago: 'efectivo', cancelada: { $ne: true } },
       { projection: { folio: 1, total: 1, fecha: 1 } }
     ).sort({ fecha: 1 }).toArray(),
   ]);
@@ -488,8 +511,8 @@ app.get('/api/dashboard', wrap(async (_req, res) => {
   const finMes    = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0, 23, 59, 59, 999);
 
   const [ventasHoy, ventasMes] = await Promise.all([
-    db.collection('ventas').find({ fecha: { $gte: inicioDia, $lte: finDia   } }).toArray(),
-    db.collection('ventas').find({ fecha: { $gte: inicioMes, $lte: finMes   } }).toArray(),
+    db.collection('ventas').find({ fecha: { $gte: inicioDia, $lte: finDia }, cancelada: { $ne: true } }).toArray(),
+    db.collection('ventas').find({ fecha: { $gte: inicioMes, $lte: finMes }, cancelada: { $ne: true } }).toArray(),
   ]);
 
   const porHora          = Array(24).fill(0);

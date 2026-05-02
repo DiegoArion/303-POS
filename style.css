@@ -623,8 +623,9 @@
       font-size: 12px; font-weight: 600; display: inline-flex;
       align-items: center; gap: 5px;
     }
-    .tag-efectivo { background: var(--success-bg); color: #16A34A; }
-    .tag-tarjeta  { background: var(--primary-light); color: var(--primary-dark); }
+    .tag-efectivo  { background: var(--success-bg); color: #16A34A; }
+    .tag-tarjeta   { background: var(--primary-light); color: var(--primary-dark); }
+    .tag-cancelada { background: #FEE2E2; color: #DC2626; }
 
     tr.expandable { cursor: pointer; }
     tr.expandable:hover td { background: var(--primary-light) !important; }
