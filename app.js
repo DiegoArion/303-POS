@@ -526,6 +526,7 @@ async function processSale() {
     toast(`${icono} ${venta.folio} — ${fmt(venta.total)} registrada`);
     imprimirTicket(venta);
     clearCart();
+    loadSales();
   } catch (err) {
     toast(`❌ Error: ${err.message}`);
   } finally {
