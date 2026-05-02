@@ -6,7 +6,7 @@ let cats         = ['Todos'];
 let cart         = [];
 let salesCat     = 'Todos';
 let prodCat      = 'Todos';
-let metodoPago   = 'efectivo';
+let metodoPago   = null;
 let ventaFiltro  = '';
 // Listas de configuración (vienen de MongoDB)
 let cfgCategorias  = [];
@@ -315,7 +315,7 @@ function changeQty(id, d) {
   if (it.qty <= 0) removeFromCart(id); else renderCart();
 }
 
-function clearCart() { cart = []; document.getElementById('venta-nota').value = ''; renderCart(); }
+function clearCart() { cart = []; document.getElementById('venta-nota').value = ''; resetMetodo(); renderCart(); }
 
 function renderCart() {
   const total = cart.reduce((s,i) => s + i.qty, 0);
@@ -373,7 +373,7 @@ function renderCart() {
 function setTotals(sub) {
   document.getElementById('sub').textContent = fmt(sub);
   document.getElementById('tot').textContent = fmt(sub);
-  document.getElementById('btn-pay').disabled = !cart.length;
+  document.getElementById('btn-pay').disabled = !cart.length || !metodoPago;
 }
 
 /* ─── MÉTODO DE PAGO ─── */
@@ -381,6 +381,12 @@ function setMetodo(m, el) {
   metodoPago = m;
   document.querySelectorAll('.metodo-btn').forEach(b => b.classList.remove('active'));
   el.classList.add('active');
+  setTotals(cart.reduce((s,i) => s + i.price * i.qty, 0));
+}
+
+function resetMetodo() {
+  metodoPago = null;
+  document.querySelectorAll('.metodo-btn').forEach(b => b.classList.remove('active'));
 }
 
 function buildTicketHtml(venta, cfg) {
