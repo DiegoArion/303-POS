@@ -1085,7 +1085,7 @@ function setVentaFiltro(metodo, el) {
 
 async function loadVentas() {
   document.getElementById('v-body').innerHTML =
-    `<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--muted);">
+    `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--muted);">
       <i class="fas fa-circle-notch fa-spin"></i> Cargando…
     </td></tr>`;
 
@@ -1093,35 +1093,36 @@ async function loadVentas() {
     const params = new URLSearchParams({ limit: 100 });
     if (ventaFiltro) params.set('metodo', ventaFiltro);
 
-    const res  = await fetch(`${API}/ventas?${params}`);
-    const data = await res.json();
+    // Stats del día siempre vienen del servidor (sin límite, sin filtro de método)
+    const [resTabla, resStats] = await Promise.all([
+      fetch(`${API}/ventas?${params}`),
+      fetch(`${API}/ventas/stats-hoy`),
+    ]);
 
-    renderVentasStats(data.ventas);
+    const data  = await resTabla.json();
+    const stats = resStats.ok ? await resStats.json() : null;
+
+    renderVentasStats(stats);
     renderVentasTable(data.ventas);
   } catch {
     document.getElementById('v-body').innerHTML =
-      `<tr><td colspan="7" style="text-align:center;padding:30px;color:var(--danger);">Error al cargar ventas</td></tr>`;
+      `<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--danger);">Error al cargar ventas</td></tr>`;
   }
 }
 
-function renderVentasStats(ventas) {
-  // Solo hoy
-  const hoy    = new Date(); hoy.setHours(0,0,0,0);
-  const deHoy  = ventas.filter(v => new Date(v.fecha) >= hoy);
-  const ef     = deHoy.filter(v => v.metodoPago === 'efectivo');
-  const tar    = deHoy.filter(v => v.metodoPago === 'tarjeta');
-  const suma   = arr => arr.reduce((s,v) => s + v.total, 0);
-
-  document.getElementById('v-count').textContent    = deHoy.length;
-  document.getElementById('v-total').textContent    = fmt(suma(deHoy));
-  document.getElementById('v-efectivo').textContent = fmt(suma(ef));
-  document.getElementById('v-tarjeta').textContent  = fmt(suma(tar));
+function renderVentasStats(stats) {
+  if (!stats) return;
+  document.getElementById('v-count').textContent    = stats.transacciones;
+  document.getElementById('v-total').textContent    = fmt(stats.total);
+  document.getElementById('v-efectivo').textContent = fmt(stats.efectivo);
+  document.getElementById('v-tarjeta').textContent  = fmt(stats.tarjeta);
+  document.getElementById('v-ganancia').textContent = stats.ganancia !== null ? fmt(stats.ganancia) : '—';
 }
 
 function renderVentasTable(ventas) {
   if (!ventas.length) {
     document.getElementById('v-body').innerHTML =
-      `<tr><td colspan="7" class="empty">Sin ventas registradas</td></tr>`;
+      `<tr><td colspan="8" class="empty">Sin ventas registradas</td></tr>`;
     return;
   }
 
@@ -1187,6 +1188,14 @@ function renderVentasTable(ventas) {
         <td style="color:var(--muted);">${hStr}</td>
         <td style="text-align:center;">${v.numProductos} pza${v.numProductos !== 1 ? 's' : ''}</td>
         <td style="font-weight:700;${esCancelada?'text-decoration:line-through;':''}">${fmt(v.total)}</td>
+        <td>${(() => {
+          if (esCancelada) return '<span style="color:var(--muted);">—</span>';
+          const todosConCosto = v.productos.every(p => p.pCosto != null && p.pCosto > 0);
+          if (!todosConCosto) return '<span style="color:var(--muted);" title="Faltan precios de compra">—</span>';
+          const gan = v.productos.reduce((s, p) => s + (p.pVenta - p.pCosto) * p.cantidad, 0);
+          const color = gan >= 0 ? 'var(--success)' : 'var(--danger)';
+          return `<span style="font-weight:700;color:${color};">${fmt(gan)}</span>`;
+        })()}</td>
         <td>
           <span class="tag-metodo ${cls}">
             <i class="fas ${ico}"></i> ${esCancelada ? 'Cancelada' : (v.metodoPago === 'tarjeta' ? 'Tarjeta' : 'Efectivo')}
@@ -1194,7 +1203,7 @@ function renderVentasTable(ventas) {
         </td>
       </tr>
       <tr id="det-${v._id}">
-        <td colspan="7" style="padding:0 18px;">
+        <td colspan="8" style="padding:0 18px;">
           <div class="venta-row-detail" id="body-${v._id}">
             <div style="font-weight:600;font-size:12px;color:var(--muted);margin-bottom:6px;">
               PRODUCTOS DE LA VENTA

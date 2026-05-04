@@ -515,6 +515,32 @@ app.get('/api/caja', wrap(async (req, res) => {
   res.json({ movimientos, ventas });
 }));
 
+// ── Stats de ventas de hoy (para la pestaña Ventas) ─────────────
+app.get('/api/ventas/stats-hoy', wrap(async (_req, res) => {
+  const ahora     = new Date();
+  const inicioDia = new Date(ahora); inicioDia.setHours(0, 0, 0, 0);
+  const finDia    = new Date(ahora); finDia.setHours(23, 59, 59, 999);
+
+  const ventas = await db.collection('ventas')
+    .find({ fecha: { $gte: inicioDia, $lte: finDia }, cancelada: { $ne: true } })
+    .toArray();
+
+  let ganancia = null;
+  for (const v of ventas) {
+    if (!v.productos.every(p => p.pCosto != null && p.pCosto > 0)) continue;
+    ganancia = (ganancia ?? 0) +
+      v.productos.reduce((s, p) => s + (p.pVenta - p.pCosto) * p.cantidad, 0);
+  }
+
+  res.json({
+    transacciones: ventas.length,
+    total:         ventas.reduce((s, v) => s + v.total, 0),
+    efectivo:      ventas.filter(v => v.metodoPago === 'efectivo').reduce((s, v) => s + v.total, 0),
+    tarjeta:       ventas.filter(v => v.metodoPago === 'tarjeta').reduce((s, v) => s + v.total, 0),
+    ganancia:      ganancia !== null ? round2(ganancia) : null,
+  });
+}));
+
 // ── Dashboard ────────────────────────────────────────────────────
 app.get('/api/dashboard', wrap(async (_req, res) => {
   const ahora     = new Date();

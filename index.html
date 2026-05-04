@@ -311,22 +311,26 @@
 
     <!-- ── REPORTE VENTAS ── -->
     <div class="page" id="page-ventas">
-      <div class="stats-row">
-        <div class="stat-card">
-          <div><div class="stat-label">Ventas Hoy</div><div class="stat-value" id="v-count">—</div></div>
-          <div class="stat-icon" style="background:var(--primary-light);color:var(--primary);">🧾</div>
+      <div class="stats-row" style="grid-template-columns:repeat(5,1fr);">
+        <div class="stat-card" style="padding:14px 16px;">
+          <div><div class="stat-label">Ventas Hoy</div><div class="stat-value" style="font-size:22px;" id="v-count">—</div></div>
+          <div class="stat-icon" style="background:var(--primary-light);color:var(--primary);width:36px;height:36px;font-size:16px;">🧾</div>
         </div>
-        <div class="stat-card">
-          <div><div class="stat-label">Total Hoy</div><div class="stat-value" style="font-size:20px;" id="v-total">—</div></div>
-          <div class="stat-icon" style="background:var(--success-bg);color:var(--success);">💰</div>
+        <div class="stat-card" style="padding:14px 16px;">
+          <div><div class="stat-label">Ganancias hoy</div><div class="stat-value" style="font-size:18px;" id="v-ganancia">—</div></div>
+          <div class="stat-icon" style="background:#DCFCE7;color:#16A34A;width:36px;height:36px;font-size:16px;"><i class="fas fa-arrow-trend-up"></i></div>
         </div>
-        <div class="stat-card">
-          <div><div class="stat-label">Efectivo</div><div class="stat-value" style="font-size:20px;" id="v-efectivo">—</div></div>
-          <div class="stat-icon" style="background:var(--success-bg);color:var(--success);">💵</div>
+        <div class="stat-card" style="padding:14px 16px;">
+          <div><div class="stat-label">Total Hoy</div><div class="stat-value" style="font-size:18px;" id="v-total">—</div></div>
+          <div class="stat-icon" style="background:var(--success-bg);color:var(--success);width:36px;height:36px;font-size:16px;">💰</div>
         </div>
-        <div class="stat-card">
-          <div><div class="stat-label">Tarjeta</div><div class="stat-value" style="font-size:20px;" id="v-tarjeta">—</div></div>
-          <div class="stat-icon" style="background:var(--primary-light);color:var(--primary);">💳</div>
+        <div class="stat-card" style="padding:14px 16px;">
+          <div><div class="stat-label">Efectivo</div><div class="stat-value" style="font-size:18px;" id="v-efectivo">—</div></div>
+          <div class="stat-icon" style="background:var(--success-bg);color:var(--success);width:36px;height:36px;font-size:16px;">💵</div>
+        </div>
+        <div class="stat-card" style="padding:14px 16px;">
+          <div><div class="stat-label">Tarjeta</div><div class="stat-value" style="font-size:18px;" id="v-tarjeta">—</div></div>
+          <div class="stat-icon" style="background:var(--primary-light);color:var(--primary);width:36px;height:36px;font-size:16px;">💳</div>
         </div>
       </div>
 
@@ -349,7 +353,7 @@
               <tr>
                 <th style="width:18px;"></th>
                 <th>Folio</th><th>Fecha</th><th>Hora</th>
-                <th>Productos</th><th>Total</th><th>Método</th>
+                <th>Productos</th><th>Total</th><th>Ganancia</th><th>Método</th>
               </tr>
             </thead>
             <tbody id="v-body"></tbody>
