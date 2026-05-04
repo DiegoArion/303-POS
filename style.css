@@ -885,7 +885,7 @@
       border-radius: 8px;
       padding: 8px 4px;
       text-align: center;
-      min-height: 62px;
+      min-height: 72px;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 4px;
       transition: background .15s;
@@ -893,9 +893,10 @@
     .dash-cal-day.has-sales { background: var(--primary-light); cursor: default; }
     .dash-cal-day.today     { border: 2px solid var(--primary); }
     .dash-cal-day.empty-day { opacity: 0; pointer-events: none; }
-    .cal-day-num   { font-size: 13px; font-weight: 600; color: var(--text); }
-    .cal-day-total { font-size: 12px; font-weight: 700; color: var(--primary-dark); }
-    .cal-day-empty { font-size: 11px; color: #CBD5E1; }
+    .cal-day-num      { font-size: 13px; font-weight: 600; color: var(--text); }
+    .cal-day-total    { font-size: 12px; font-weight: 700; color: var(--primary-dark); }
+    .cal-day-ganancia { font-size: 10.5px; font-weight: 600; color: #16A34A; }
+    .cal-day-empty    { font-size: 11px; color: #CBD5E1; }
 
     /* PEDIDOS */
     .ped-input {

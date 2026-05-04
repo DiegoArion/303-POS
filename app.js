@@ -2754,8 +2754,8 @@ function renderCalendario(mes) {
   const diasMes   = new Date(anio, mesNum + 1, 0).getDate();
 
   // Mapear datos
-  const totalesPorDia = {};
-  for (const d of mes) totalesPorDia[d.dia] = d.total;
+  const datosPorDia = {};
+  for (const d of mes) datosPorDia[d.dia] = { total: d.total, ganancia: d.ganancia };
 
   let html = '';
   // Celdas vacías al inicio
@@ -2764,13 +2764,14 @@ function renderCalendario(mes) {
   }
   // Días del mes
   for (let d = 1; d <= diasMes; d++) {
-    const total   = totalesPorDia[d] || 0;
+    const { total = 0, ganancia = 0 } = datosPorDia[d] || {};
     const esHoy   = d === hoyDia;
     const hasSale = total > 0;
     html += `<div class="dash-cal-day${hasSale ? ' has-sales' : ''}${esHoy ? ' today' : ''}">
       <span class="cal-day-num">${d}</span>
       ${hasSale
-        ? `<span class="cal-day-total">${fmt(total)}</span>`
+        ? `<span class="cal-day-total">${fmt(total)}</span>
+           <span class="cal-day-ganancia">${ganancia > 0 ? fmt(ganancia) : ''}</span>`
         : `<span class="cal-day-empty">—</span>`}
     </div>`;
   }
