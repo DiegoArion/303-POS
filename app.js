@@ -641,7 +641,7 @@ async function loadInventory() {
     renderInventoryTable(all);
   } catch {
     document.getElementById('i-body').innerHTML =
-      '<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:30px;">Error al cargar inventario</td></tr>';
+      '<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:30px;">Error al cargar inventario</td></tr>';
   }
 }
 
@@ -661,7 +661,7 @@ function renderInventoryTable(list) {
 
   if (!list.length) {
     document.getElementById('i-body').innerHTML =
-      '<tr><td colspan="9" class="empty">Sin resultados</td></tr>';
+      '<tr><td colspan="10" class="empty">Sin resultados</td></tr>';
     return;
   }
 
@@ -700,6 +700,19 @@ function renderInventoryTable(list) {
                <span class="badge-descuento" style="font-size:10px;">-${d}%</span></span>`
             : fmt(p.price); })()}
         </td>
+        <td>${(() => {
+          const costo = p.retail;
+          const venta = p.price;
+          if (!costo || !venta || costo <= 0) return '<span style="color:var(--muted);">—</span>';
+          const gan = venta - costo;
+          const pct = (gan / costo) * 100;
+          const color = gan >= 0 ? 'var(--success)' : 'var(--danger)';
+          const bg    = gan >= 0 ? 'var(--success-bg)' : 'var(--danger-bg)';
+          return `<div style="display:flex;flex-direction:column;gap:2px;">
+            <span style="font-weight:600;color:${color};">${fmt(gan)}</span>
+            <span style="font-size:11px;background:${bg};color:${color};padding:1px 6px;border-radius:4px;width:fit-content;">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span>
+          </div>`;
+        })()}</td>
         <td>
           <div class="stock-bar-wrap">
             <div class="stock-bar">
