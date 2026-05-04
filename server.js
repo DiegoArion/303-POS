@@ -11,7 +11,18 @@ const IMAGENES_DIR = path.join(__dirname, 'imagenes');
 if (!fs.existsSync(IMAGENES_DIR)) fs.mkdirSync(IMAGENES_DIR);
 
 // ── Config ───────────────────────────────────────────────────────
-const IS_PROD   = process.env.DB_MODE === 'prod';
+function detectarModo() {
+  if (process.env.DB_MODE === 'prod') return true;
+  if (process.env.DB_MODE === 'dev')  return false;
+  try {
+    const rama = require('child_process')
+      .execSync('git rev-parse --abbrev-ref HEAD', { cwd: __dirname, timeout: 3000 })
+      .toString().trim();
+    return rama === 'PROD';
+  } catch { return false; }
+}
+
+const IS_PROD   = detectarModo();
 const MONGO_URI = 'mongodb://localhost:27017';
 const DB_NAME   = IS_PROD ? 'pos_prod' : 'pos';
 const PORT      = 3000;
@@ -525,19 +536,12 @@ app.get('/api/ventas/stats-hoy', wrap(async (_req, res) => {
     .find({ fecha: { $gte: inicioDia, $lte: finDia }, cancelada: { $ne: true } })
     .toArray();
 
-  let ganancia = null;
-  for (const v of ventas) {
-    if (!v.productos.every(p => p.pCosto != null && p.pCosto > 0)) continue;
-    ganancia = (ganancia ?? 0) +
-      v.productos.reduce((s, p) => s + (p.pVenta - p.pCosto) * p.cantidad, 0);
-  }
-
   res.json({
     transacciones: ventas.length,
-    total:         ventas.reduce((s, v) => s + v.total, 0),
-    efectivo:      ventas.filter(v => v.metodoPago === 'efectivo').reduce((s, v) => s + v.total, 0),
-    tarjeta:       ventas.filter(v => v.metodoPago === 'tarjeta').reduce((s, v) => s + v.total, 0),
-    ganancia:      ganancia !== null ? round2(ganancia) : null,
+    total:         round2(ventas.reduce((s, v) => s + v.total, 0)),
+    efectivo:      round2(ventas.filter(v => v.metodoPago === 'efectivo').reduce((s, v) => s + v.total, 0)),
+    tarjeta:       round2(ventas.filter(v => v.metodoPago === 'tarjeta').reduce((s, v) => s + v.total, 0)),
+    ganancia:      round2(ventas.reduce((s, v) => s + calcGanancia(v), 0)),
   });
 }));
 
