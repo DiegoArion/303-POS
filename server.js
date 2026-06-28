@@ -403,6 +403,7 @@ app.post('/api/pedidos', wrap(async (req, res) => {
     cantidad:   parseFloat(p.cantidad),
     unidad:     (p.unidad || '').trim(),
     costo:      round2(p.costo),
+    venta:      round2(p.venta),
     subtotal:   round2(p.cantidad * p.costo),
   }));
 
@@ -422,8 +423,12 @@ app.post('/api/pedidos', wrap(async (req, res) => {
   for (const item of items) {
     if (!item.productoId) continue;
     try {
+      // Actualiza stock y, si se indicó, el precio de venta (pVenta)
+      const set = { actualizadoEn: new Date() };
+      if (item.venta > 0) set.pVenta = item.venta;
       await db.collection('productos').updateOne(
-        { _id: ObjectId.createFromHexString(item.productoId) }, { $inc: { stock: item.cantidad } }
+        { _id: ObjectId.createFromHexString(item.productoId) },
+        { $inc: { stock: item.cantidad }, $set: set }
       );
     } catch { /* id inválido, ignorar */ }
   }

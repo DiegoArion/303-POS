@@ -125,7 +125,8 @@ document.querySelectorAll('.nav-item').forEach(el => {
     if (page === 'ventas')       loadVentas();
     if (page === 'agregar')      initBulkPage();
     if (page === 'config')       loadConfig();
-    if (page === 'nuevo-pedido') initNuevoPedido();
+    // Solo inicializa si no hay un pedido en curso; así se conserva al cambiar de pantalla
+    if (page === 'nuevo-pedido' && !pedRows.length) initNuevoPedido();
     if (page === 'pedidos')      loadPedidos();
     if (page === 'usuarios')     loadUsuarios();
     if (page === 'caja-mov')     initCajaMov();
@@ -257,7 +258,7 @@ function openGranel(id) {
   document.getElementById('granel-total').value = '';
   document.getElementById('granel-calc-hint').textContent = 'Basado en precio × peso';
   document.getElementById('granel-overlay').classList.add('open');
-  setTimeout(() => document.getElementById('granel-peso').focus(), 180);
+  setTimeout(() => document.getElementById('granel-total').focus(), 180);
 }
 
 function closeGranel() {
@@ -2804,7 +2805,7 @@ function initNuevoPedido() {
 
 function pedAddRow() {
   const id  = ++pedRowId;
-  const row = { id, productoId: '', nombre: '', cantidad: 1, unidad: '', costo: 0 };
+  const row = { id, productoId: '', nombre: '', cantidad: 1, unidad: '', costo: 0, venta: 0 };
   pedRows.push(row);
 
   const tr = document.createElement('tr');
@@ -2831,6 +2832,10 @@ function pedAddRow() {
       <input class="ped-input" type="number" min="0" step="0.01" placeholder="0.00"
         id="ped-c-${id}" oninput="pedCalc(${id})" placeholder="Precio compra">
     </td>
+    <td style="width:120px;">
+      <input class="ped-input" type="number" min="0" step="0.01" placeholder="0.00"
+        id="ped-v-${id}" oninput="pedCalc(${id})" placeholder="Precio venta">
+    </td>
     <td style="width:110px;">
       <span class="ped-sub" id="ped-s-${id}">$0.00</span>
     </td>
@@ -2855,8 +2860,11 @@ async function pedBuscarNow(id) {
     const list = (await res.json()).slice(0, 6).map(mapDoc);
     _pedSugs[id] = list;
     if (!list.length) { ctr.innerHTML = ''; return; }
-    ctr.innerHTML = `<div style="position:absolute;top:2px;left:0;right:0;background:var(--card);
-      border:1.5px solid var(--primary);border-radius:8px;z-index:200;box-shadow:var(--shadow-md);overflow:hidden;">
+    // position:fixed anclado al input para escapar del overflow:hidden de .table-card
+    const r = document.getElementById(`ped-n-${id}`).getBoundingClientRect();
+    ctr.innerHTML = `<div style="position:fixed;top:${r.bottom + 2}px;left:${r.left}px;width:${r.width}px;
+      background:var(--card);border:1.5px solid var(--primary);border-radius:8px;z-index:200;
+      box-shadow:var(--shadow-md);overflow:hidden;">
       ${list.map((p, i) => `
         <div onclick="pedSelectProducto(${id}, _pedSugs[${id}][${i}])"
           style="padding:8px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);"
@@ -2904,6 +2912,9 @@ function pedSelectProducto(id, p) {
   // Costo = precio retail (pCosto) del producto
   const costo = p.retail || 0;
   document.getElementById(`ped-c-${id}`).value = costo > 0 ? costo.toFixed(2) : '';
+  // Precio de venta = precio actual (pVenta) — editable
+  const venta = p.price || 0;
+  document.getElementById(`ped-v-${id}`).value = venta > 0 ? venta.toFixed(2) : '';
   pedCalc(id);
 }
 
@@ -2911,8 +2922,9 @@ function pedCalc(id) {
   const q   = parseFloat(document.getElementById(`ped-q-${id}`)?.value) || 0;
   const c   = parseFloat(document.getElementById(`ped-c-${id}`)?.value) || 0;
   const sub = q * c;
+  const v   = parseFloat(document.getElementById(`ped-v-${id}`)?.value) || 0;
   const row = pedRows.find(r => r.id === id);
-  if (row) { row.cantidad = q; row.costo = c; row.unidad = document.getElementById(`ped-u-${id}`)?.value || ''; }
+  if (row) { row.cantidad = q; row.costo = c; row.venta = v; row.unidad = document.getElementById(`ped-u-${id}`)?.value || ''; }
   document.getElementById(`ped-s-${id}`).textContent = fmt(sub);
   pedUpdateTotal();
 }
@@ -2947,6 +2959,7 @@ async function guardarPedido() {
     cantidad:   parseFloat(document.getElementById(`ped-q-${r.id}`)?.value) || 0,
     unidad:     document.getElementById(`ped-u-${r.id}`)?.value || '',
     costo:      parseFloat(document.getElementById(`ped-c-${r.id}`)?.value) || 0,
+    venta:      parseFloat(document.getElementById(`ped-v-${r.id}`)?.value) || 0,
   })).filter(p => p.nombre && p.cantidad > 0);
 
   if (!productos.length) { toast('⚠️ Agrega al menos un producto'); return; }
