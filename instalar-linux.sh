@@ -83,8 +83,12 @@ else
     fi
   fi
 
-  # Limpieza de intentos previos y datos incompatibles
+  # Limpieza de intentos previos y datos incompatibles.
+  # El purge es clave: si ya había un MongoDB de otra versión instalado
+  # (p.ej. 8.0), apt NO lo degradaría solo y quedaría el binario incorrecto.
   sudo systemctl stop mongod 2>/dev/null || true
+  sudo apt purge -y 'mongodb-org*' 2>/dev/null || true
+  sudo rm -rf /var/lib/mongodb/* /var/log/mongodb/* 2>/dev/null || true
   sudo rm -f /etc/apt/sources.list.d/mongodb-org-*.list
   sudo rm -f /usr/share/keyrings/mongodb-server-*.gpg
 
