@@ -2654,6 +2654,8 @@ async function eliminarUsuario(id, nombre) {
 
 /* ─── DASHBOARD ─── */
 let _chartStock = null;
+let _rotOffset  = 0;      // 0 = semana actual, -1 = anterior…
+let _rotData    = null;   // { semana, productos } de la respuesta del backend
 
 async function loadDashboard() {
   try {
@@ -2668,9 +2670,75 @@ async function loadDashboard() {
     renderChartStock(prods);
     renderStockBajo(prods);
     renderCalendario(data.mes);
+    loadRotacion();
   } catch (err) {
     toast(`❌ Error cargando dashboard: ${err.message}`);
   }
+}
+
+async function loadRotacion() {
+  try {
+    _rotData = await apiFetch(`/dashboard/rotacion?offset=${_rotOffset}`);
+    const s = _rotData.semana;
+    document.getElementById('d-rot-rango').textContent = rangoSemanaTexto(s.inicio, s.fin);
+    document.getElementById('d-rot-next').disabled = s.esActual;
+    renderRotacion();
+  } catch (err) {
+    toast(`❌ Error cargando rotación: ${err.message}`);
+  }
+}
+
+function rotSemana(dir) {
+  const nuevo = _rotOffset + dir;
+  if (nuevo > 0) return;            // no hay semanas futuras
+  _rotOffset = nuevo;
+  loadRotacion();
+}
+
+function rangoSemanaTexto(inicioISO, finISO) {
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const a = new Date(inicioISO), b = new Date(finISO);
+  return `${a.getDate()} ${meses[a.getMonth()]} – ${b.getDate()} ${meses[b.getMonth()]} ${b.getFullYear()}`;
+}
+
+function renderRotacion() {
+  const body = document.getElementById('d-rot-body');
+  if (!_rotData) return;
+
+  const q = document.getElementById('d-rot-buscar').value.trim().toLowerCase();
+  const lista = _rotData.productos.filter(p =>
+    !q || p.nombre.toLowerCase().includes(q) || (p.codigo || '').toLowerCase().includes(q));
+
+  if (!lista.length) {
+    body.innerHTML = '<tr><td colspan="6" class="empty">Sin ventas esta semana</td></tr>';
+    return;
+  }
+
+  const num = n => Number.isInteger(n) ? n : n.toFixed(2);
+
+  body.innerHTML = lista.map(p => {
+    const u = p.unidad ? ` ${p.unidad}` : '';
+    // Comparación vs semana anterior
+    const diff = p.unidades - p.unidadesPrev;
+    let delta;
+    if (diff > 0)      delta = `<span class="rot-up">▲ ${num(diff)}</span>`;
+    else if (diff < 0) delta = `<span class="rot-down">▼ ${num(-diff)}</span>`;
+    else               delta = `<span class="rot-eq">–</span>`;
+    const prevTxt = `${num(p.unidadesPrev)}${u} <span style="color:var(--muted);">·</span> ${delta}`;
+    // Stock
+    const stockTxt = p.stock == null
+      ? '<span style="color:var(--muted);">—</span>'
+      : `<span style="color:${stockColor(p.stock)};font-weight:600;">${p.stock}</span>`;
+    return `
+      <tr>
+        <td>${p.nombre}${p.codigo ? ` <span style="color:var(--muted);font-size:12px;">${p.codigo}</span>` : ''}</td>
+        <td style="text-align:right;font-weight:700;">${num(p.unidades)}${u}</td>
+        <td style="text-align:right;">${prevTxt}</td>
+        <td style="text-align:right;">${stockTxt}</td>
+        <td style="text-align:right;">${fmt(p.ingreso)}</td>
+        <td>${p.proveedor || '<span style="color:var(--muted);">—</span>'}</td>
+      </tr>`;
+  }).join('');
 }
 
 function renderDashCards(hoy) {

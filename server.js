@@ -598,6 +598,83 @@ app.get('/api/dashboard', wrap(async (_req, res) => {
   });
 }));
 
+// Rotación semanal de productos (lunes→domingo). offset: 0 = semana actual, -1 = anterior…
+app.get('/api/dashboard/rotacion', wrap(async (req, res) => {
+  const offset = parseInt(req.query.offset) || 0;
+
+  // Lunes 00:00 de la semana objetivo
+  const base = new Date();
+  base.setDate(base.getDate() + offset * 7);
+  const dow = (base.getDay() + 6) % 7;           // 0=Lun … 6=Dom
+  const inicioSemana = new Date(base);
+  inicioSemana.setDate(base.getDate() - dow);
+  inicioSemana.setHours(0, 0, 0, 0);
+  const finSemana = new Date(inicioSemana);
+  finSemana.setDate(inicioSemana.getDate() + 6);
+  finSemana.setHours(23, 59, 59, 999);
+
+  // Semana anterior (para comparar)
+  const inicioSemanaPrev = new Date(inicioSemana); inicioSemanaPrev.setDate(inicioSemana.getDate() - 7);
+
+  // Traer ventas de ambas semanas de una sola vez, y el stock/proveedor actual
+  const [ventas, productos] = await Promise.all([
+    db.collection('ventas')
+      .find({ fecha: { $gte: inicioSemanaPrev, $lte: finSemana }, cancelada: { $ne: true } })
+      .toArray(),
+    db.collection('productos').find({}, { projection: { codigo: 1, stock: 1, proveedor: 1 } }).toArray(),
+  ]);
+
+  const infoProd = new Map();
+  for (const p of productos) {
+    if (p.codigo) infoProd.set(p.codigo, { stock: p.stock ?? null, proveedor: p.proveedor || '' });
+  }
+
+  // Acumular por clave (código si existe, si no el nombre)
+  const acc = new Map();
+  for (const v of ventas) {
+    const esActual = new Date(v.fecha) >= inicioSemana;
+    for (const p of (v.productos || [])) {
+      const clave = p.codigo || p.nombre;
+      if (!clave) continue;
+      let r = acc.get(clave);
+      if (!r) {
+        r = { codigo: p.codigo || '', nombre: p.nombre, unidad: p.unidad || '',
+              unidades: 0, unidadesPrev: 0, ingreso: 0 };
+        acc.set(clave, r);
+      }
+      if (esActual) { r.unidades += p.cantidad; r.ingreso += p.subtotal; }
+      else          { r.unidadesPrev += p.cantidad; }
+    }
+  }
+
+  const lista = [...acc.values()]
+    .filter(r => r.unidades > 0 || r.unidadesPrev > 0)
+    .map(r => {
+      const info = r.codigo ? infoProd.get(r.codigo) : null;
+      return {
+        codigo:       r.codigo,
+        nombre:       r.nombre,
+        unidad:       r.unidad,
+        unidades:     round2(r.unidades),
+        unidadesPrev: round2(r.unidadesPrev),
+        ingreso:      round2(r.ingreso),
+        stock:        info ? info.stock : null,
+        proveedor:    info ? info.proveedor : '',
+      };
+    })
+    .sort((a, b) => b.unidades - a.unidades);
+
+  res.json({
+    semana: {
+      inicio:   inicioSemana.toISOString(),
+      fin:      finSemana.toISOString(),
+      offset,
+      esActual: offset === 0,
+    },
+    productos: lista,
+  });
+}));
+
 // ── Inventariado ─────────────────────────────────────────────────
 app.post('/api/inventariado', wrap(async (req, res) => {
   const { productoId, nombre, cantidad, stockAnterior, proveedor, pVenta } = req.body;

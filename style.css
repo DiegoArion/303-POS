@@ -898,6 +898,20 @@
     .cal-day-ganancia { font-size: 10.5px; font-weight: 600; color: #16A34A; }
     .cal-day-empty    { font-size: 11px; color: #CBD5E1; }
 
+    /* ROTACIÓN SEMANAL */
+    .rot-nav { display: flex; align-items: center; gap: 10px; }
+    .rot-nav span { font-size: 13px; font-weight: 600; color: var(--text); min-width: 150px; text-align: center; }
+    .rot-nav button {
+      width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;
+      border: 1.5px solid var(--border); border-radius: 8px; background: var(--card);
+      color: var(--text); cursor: pointer;
+    }
+    .rot-nav button:hover:not(:disabled) { border-color: var(--primary); color: var(--primary); }
+    .rot-nav button:disabled { opacity: .4; cursor: not-allowed; }
+    .rot-up   { color: var(--success); font-weight: 600; font-size: 12px; }
+    .rot-down { color: var(--danger);  font-weight: 600; font-size: 12px; }
+    .rot-eq   { color: var(--muted); }
+
     /* PEDIDOS */
     .ped-input {
       width: 100%; padding: 7px 9px;

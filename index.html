@@ -180,6 +180,38 @@
         </div>
         <div class="dash-cal-grid" id="d-calendario"></div>
       </div>
+
+      <div class="table-card" style="margin-top:20px;">
+        <div class="table-toolbar" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <div style="font-size:15px;font-weight:700;">
+            <i class="fas fa-arrows-rotate" style="color:var(--primary);margin-right:8px;"></i>Rotación semanal de productos
+          </div>
+          <div class="rot-nav">
+            <button id="d-rot-prev" title="Semana anterior" onclick="rotSemana(-1)"><i class="fas fa-chevron-left"></i></button>
+            <span id="d-rot-rango">—</span>
+            <button id="d-rot-next" title="Semana siguiente" onclick="rotSemana(1)"><i class="fas fa-chevron-right"></i></button>
+          </div>
+          <div class="searchbox" style="max-width:280px;flex:1;margin-left:auto;">
+            <i class="fas fa-search"></i>
+            <input id="d-rot-buscar" type="text" placeholder="Buscar producto o código…" oninput="renderRotacion()">
+          </div>
+        </div>
+        <div style="overflow-x:auto;max-height:520px;overflow-y:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th style="text-align:right;">Unidades</th>
+                <th style="text-align:right;">Semana ant.</th>
+                <th style="text-align:right;">Stock</th>
+                <th style="text-align:right;">Ingreso</th>
+                <th>Proveedor</th>
+              </tr>
+            </thead>
+            <tbody id="d-rot-body"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- ── PUNTO DE VENTA ── -->
