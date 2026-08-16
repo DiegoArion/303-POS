@@ -212,6 +212,36 @@
           </table>
         </div>
       </div>
+
+      <div class="table-card" style="margin-top:20px;">
+        <div class="table-toolbar" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <div style="font-size:15px;font-weight:700;">
+            <i class="fas fa-hourglass-half" style="color:var(--warning);margin-right:8px;"></i>Productos estancados
+            <span style="font-weight:400;color:var(--muted);font-size:13px;">— más tiempo sin venderse</span>
+          </div>
+          <div class="searchbox" style="max-width:280px;flex:1;margin-left:auto;">
+            <i class="fas fa-search"></i>
+            <input id="d-est-buscar" type="text" placeholder="Buscar producto o código…" oninput="renderEstancados()">
+          </div>
+        </div>
+        <div style="overflow-x:auto;max-height:520px;overflow-y:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Producto</th>
+                <th style="text-align:right;">Sin venderse</th>
+                <th>Última venta</th>
+                <th style="text-align:right;">Total vendido</th>
+                <th style="text-align:right;">Margen/u</th>
+                <th style="text-align:right;">Ganancia total</th>
+                <th>Proveedor</th>
+                <th style="text-align:center;">Eliminar</th>
+              </tr>
+            </thead>
+            <tbody id="d-est-body"></tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- ── PUNTO DE VENTA ── -->

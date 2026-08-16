@@ -135,15 +135,18 @@ app.post('/api/productos', wrap(async (req, res) => {
 }));
 
 app.get('/api/productos/generar-codigo', wrap(async (_req, res) => {
-  const ultimo = await db.collection('productos')
-    .find({ codigo: { $regex: '^2\\d{12}$' } })
-    .sort({ codigo: -1 })
-    .limit(1)
-    .toArray();
+  const filtro = { codigo: { $regex: '^2\\d{12}$' } };
+  // Mirar activos Y eliminados para no reutilizar un código interno ya usado
+  const [act, elim] = await Promise.all([
+    db.collection('productos').find(filtro).sort({ codigo: -1 }).limit(1).toArray(),
+    db.collection('productos_eliminados').find(filtro).sort({ codigo: -1 }).limit(1).toArray(),
+  ]);
+  const codigos = [...act, ...elim].map(d => d.codigo).filter(Boolean).sort();
 
   let base12;
-  if (ultimo.length) {
-    base12 = String(parseInt(ultimo[0].codigo.slice(0, 12)) + 1).padStart(12, '0');
+  if (codigos.length) {
+    const maxCod = codigos[codigos.length - 1];   // todos son 13 dígitos → orden lexicográfico = numérico
+    base12 = String(parseInt(maxCod.slice(0, 12)) + 1).padStart(12, '0');
   } else {
     base12 = '200000000001';
   }
@@ -169,8 +172,17 @@ app.put('/api/productos/:id', wrap(async (req, res) => {
 app.delete('/api/productos/:id', wrap(async (req, res) => {
   const oid = ObjectId.createFromHexString(req.params.id);
 
-  const result = await db.collection('productos').deleteOne({ _id: oid });
-  if (result.deletedCount === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+  const prod = await db.collection('productos').findOne({ _id: oid });
+  if (!prod) return res.status(404).json({ error: 'Producto no encontrado' });
+
+  await db.collection('productos').deleteOne({ _id: oid });
+
+  // Registro de eliminados: deja rastro y evita que generar-codigo reutilice un código interno
+  await db.collection('productos_eliminados').insertOne({
+    codigo:      prod.codigo || '',
+    nombre:      prod.producto || '',
+    eliminadoEn: new Date(),
+  });
 
   // Propagar eliminación a Atlas, o guardar como pendiente
   if (dbAtlas) {
@@ -673,6 +685,60 @@ app.get('/api/dashboard/rotacion', wrap(async (req, res) => {
     },
     productos: lista,
   });
+}));
+
+// Productos estancados: los que llevan más tiempo sin venderse (para decidir descontinuar).
+// Parte de TODOS los productos, así aparecen también los que nunca se vendieron.
+app.get('/api/dashboard/estancados', wrap(async (_req, res) => {
+  const [productos, ventas] = await Promise.all([
+    db.collection('productos').find({}).toArray(),
+    db.collection('ventas').find({ cancelada: { $ne: true } },
+      { projection: { fecha: 1, 'productos.codigo': 1, 'productos.nombre': 1,
+                      'productos.cantidad': 1, 'productos.pVenta': 1, 'productos.pCosto': 1 } }).toArray(),
+  ]);
+
+  // Agregado de ventas por producto (clave = código, o nombre si no hay código)
+  const agg = new Map();
+  for (const v of ventas) {
+    const fecha = new Date(v.fecha);
+    for (const p of (v.productos || [])) {
+      const clave = p.codigo || p.nombre;
+      if (!clave) continue;
+      let a = agg.get(clave);
+      if (!a) { a = { totalVendido: 0, gananciaTotal: 0, ultimaVenta: null }; agg.set(clave, a); }
+      a.totalVendido += p.cantidad;
+      if (p.pCosto != null && p.pCosto > 0) a.gananciaTotal += (p.pVenta - p.pCosto) * p.cantidad;
+      if (!a.ultimaVenta || fecha > a.ultimaVenta) a.ultimaVenta = fecha;
+    }
+  }
+
+  const ahora = Date.now();
+  const lista = productos.map(prod => {
+    const clave = prod.codigo || prod.producto;
+    const a     = agg.get(clave);
+    const ultima = a?.ultimaVenta ?? null;
+    const margen = (prod.pCosto != null && prod.pCosto > 0) ? round2(prod.pVenta - prod.pCosto) : null;
+    return {
+      _id:           prod._id,
+      codigo:        prod.codigo || '',
+      nombre:        prod.producto,
+      proveedor:     prod.proveedor || '',
+      stock:         prod.stock ?? null,
+      ultimaVenta:   ultima ? ultima.toISOString() : null,
+      diasSinVender: ultima ? Math.floor((ahora - ultima.getTime()) / 86400000) : null,
+      totalVendido:  round2(a?.totalVendido ?? 0),
+      margenUnidad:  margen,
+      gananciaTotal: round2(a?.gananciaTotal ?? 0),
+    };
+  })
+  // Nunca vendidos primero (orden -Infinity), luego por venta más antigua
+  .sort((x, y) => {
+    const kx = x.ultimaVenta ? new Date(x.ultimaVenta).getTime() : -Infinity;
+    const ky = y.ultimaVenta ? new Date(y.ultimaVenta).getTime() : -Infinity;
+    return kx - ky;
+  });
+
+  res.json({ productos: lista });
 }));
 
 // ── Inventariado ─────────────────────────────────────────────────

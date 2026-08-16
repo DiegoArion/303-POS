@@ -2656,6 +2656,7 @@ async function eliminarUsuario(id, nombre) {
 let _chartStock = null;
 let _rotOffset  = 0;      // 0 = semana actual, -1 = anterior…
 let _rotData    = null;   // { semana, productos } de la respuesta del backend
+let _estData    = null;   // { productos } de productos estancados
 
 async function loadDashboard() {
   try {
@@ -2671,6 +2672,7 @@ async function loadDashboard() {
     renderStockBajo(prods);
     renderCalendario(data.mes);
     loadRotacion();
+    loadEstancados();
   } catch (err) {
     toast(`❌ Error cargando dashboard: ${err.message}`);
   }
@@ -2739,6 +2741,78 @@ function renderRotacion() {
         <td>${p.proveedor || '<span style="color:var(--muted);">—</span>'}</td>
       </tr>`;
   }).join('');
+}
+
+async function loadEstancados() {
+  try {
+    _estData = await apiFetch('/dashboard/estancados');
+    renderEstancados();
+  } catch (err) {
+    toast(`❌ Error cargando estancados: ${err.message}`);
+  }
+}
+
+function renderEstancados() {
+  const body = document.getElementById('d-est-body');
+  if (!_estData) return;
+
+  const q = document.getElementById('d-est-buscar').value.trim().toLowerCase();
+  const lista = _estData.productos.filter(p =>
+    !q || p.nombre.toLowerCase().includes(q) || (p.codigo || '').toLowerCase().includes(q));
+
+  if (!lista.length) {
+    body.innerHTML = '<tr><td colspan="8" class="empty">Sin productos</td></tr>';
+    return;
+  }
+
+  const num  = n => Number.isInteger(n) ? n : n.toFixed(2);
+  const meses = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+  const fechaTxt = iso => { const d = new Date(iso); return `${d.getDate()} ${meses[d.getMonth()]} ${d.getFullYear()}`; };
+
+  body.innerHTML = lista.map(p => {
+    // Tiempo sin venderse
+    let sinVender;
+    if (p.diasSinVender == null)      sinVender = '<span style="color:var(--danger);font-weight:700;">Nunca</span>';
+    else if (p.diasSinVender > 90)    sinVender = `<span style="color:var(--danger);font-weight:600;">${p.diasSinVender} d</span>`;
+    else if (p.diasSinVender > 30)    sinVender = `<span style="color:var(--warning);font-weight:600;">${p.diasSinVender} d</span>`;
+    else                              sinVender = `${p.diasSinVender} d`;
+    const ultima = p.ultimaVenta ? fechaTxt(p.ultimaVenta) : '<span style="color:var(--muted);">—</span>';
+    const margen = p.margenUnidad == null ? '<span style="color:var(--muted);">—</span>' : fmt(p.margenUnidad);
+    return `
+      <tr>
+        <td>${p.nombre}${p.codigo ? ` <span style="color:var(--muted);font-size:12px;">${p.codigo}</span>` : ''}</td>
+        <td style="text-align:right;">${sinVender}</td>
+        <td>${ultima}</td>
+        <td style="text-align:right;">${num(p.totalVendido)}</td>
+        <td style="text-align:right;">${margen}</td>
+        <td style="text-align:right;">${fmt(p.gananciaTotal)}</td>
+        <td>${p.proveedor || '<span style="color:var(--muted);">—</span>'}</td>
+        <td style="text-align:center;">
+          <button onclick="eliminarProductoEst('${p._id}', '${(p.nombre || '').replace(/'/g, '&#39;')}')"
+            style="border:none;background:var(--danger-bg);border-radius:6px;padding:5px 9px;
+            cursor:pointer;color:var(--danger);font-size:12px;" title="Eliminar producto">
+            <i class="fas fa-trash"></i>
+          </button>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+async function eliminarProductoEst(id, nombre) {
+  const resp = prompt(`⚠️ Vas a ELIMINAR por completo "${nombre}".\n\nSe quitará del inventario, su stock y las métricas. Esta acción NO se puede deshacer.\n\nEscribe "sí" para confirmar:`);
+  if (resp === null) return;                                   // canceló
+  const val = resp.trim().toLowerCase();
+  if (val !== 'sí' && val !== 'si') {                          // acepta con o sin acento
+    toast('❌ Cancelado — no se escribió "sí"');
+    return;
+  }
+  try {
+    await apiFetch(`/productos/${id}`, { method: 'DELETE' });
+    toast(`🗑 "${nombre}" eliminado por completo`);
+    await loadDashboard();                                     // refresca todas las métricas
+  } catch (err) {
+    toast(`❌ ${err.message}`);
+  }
 }
 
 function renderDashCards(hoy) {
