@@ -191,7 +191,16 @@
             <span id="d-rot-rango">—</span>
             <button id="d-rot-next" title="Semana siguiente" onclick="rotSemana(1)"><i class="fas fa-chevron-right"></i></button>
           </div>
-          <div class="searchbox" style="max-width:280px;flex:1;margin-left:auto;">
+          <select id="d-rot-prov" onchange="renderRotacion()" title="Filtrar por proveedor"
+            style="padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text);font-size:13px;">
+            <option value="">Todos los proveedores</option>
+          </select>
+          <select id="d-rot-orden" onchange="renderRotacion()" title="Ordenar"
+            style="padding:8px 10px;border:1.5px solid var(--border);border-radius:var(--radius);background:var(--card);color:var(--text);font-size:13px;">
+            <option value="unidades">Ordenar: esta semana ↓</option>
+            <option value="prev">Ordenar: semana anterior ↓</option>
+          </select>
+          <div class="searchbox" style="max-width:240px;flex:1;margin-left:auto;">
             <i class="fas fa-search"></i>
             <input id="d-rot-buscar" type="text" placeholder="Buscar producto o código…" oninput="renderRotacion()">
           </div>
@@ -204,11 +213,38 @@
                 <th style="text-align:right;">Unidades</th>
                 <th style="text-align:right;">Semana ant.</th>
                 <th style="text-align:right;">Stock</th>
+                <th style="text-align:right;">Stock máx</th>
+                <th style="text-align:right;">Precio compra</th>
+                <th style="text-align:right;">Precio venta</th>
+                <th style="text-align:right;">Total compra</th>
                 <th style="text-align:right;">Ingreso</th>
                 <th>Proveedor</th>
               </tr>
             </thead>
             <tbody id="d-rot-body"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="table-card" style="margin-top:20px;">
+        <div class="table-toolbar">
+          <div style="font-size:15px;font-weight:700;">
+            <i class="fas fa-truck-ramp-box" style="color:var(--primary);margin-right:8px;"></i>Valor de inventario por proveedor
+            <span style="font-weight:400;color:var(--muted);font-size:13px;">— a precio de costo, para resurtido</span>
+          </div>
+        </div>
+        <div style="overflow-x:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Proveedor</th>
+                <th style="text-align:right;">Productos en stock</th>
+                <th style="text-align:right;">Valor actual</th>
+                <th style="text-align:right;">Stock máximo</th>
+                <th style="text-align:right;">Por comprar</th>
+              </tr>
+            </thead>
+            <tbody id="d-valprov-body"></tbody>
           </table>
         </div>
       </div>
@@ -362,7 +398,7 @@
               <tr>
                 <th>Producto</th><th>SKU</th><th>Tags</th><th>Proveedor</th>
                 <th>Unidad</th><th>Precio Retail</th><th>Precio Venta</th><th>Ganancia</th>
-                <th style="min-width:160px;">Stock</th><th>Estado</th>
+                <th style="min-width:160px;">Stock</th><th style="text-align:center;">Stock máx</th><th>Estado</th>
               </tr>
             </thead>
             <tbody id="i-body"></tbody>
@@ -524,6 +560,17 @@
               <button onclick="cfgAdd('proveedores')"><i class="fas fa-plus"></i> Agregar</button>
             </div>
             <div class="config-list" id="cfg-prov-list"></div>
+          </div>
+        </div>
+
+        <div class="config-card">
+          <div class="config-card-head">
+            <div class="config-card-title"><i class="fas fa-boxes-packing"></i> Proveedores a resurtir</div>
+            <span class="pill pill-info" id="cfg-resurtido-count">0</span>
+          </div>
+          <div class="config-card-body">
+            <div class="config-empty" style="margin-bottom:8px;">Marca los proveedores que verás en la tabla de valor de inventario del dashboard.</div>
+            <div class="config-list" id="cfg-resurtido-list"></div>
           </div>
         </div>
 

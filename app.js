@@ -12,6 +12,7 @@ let ventaFiltro  = '';
 let cfgCategorias  = [];
 let cfgProveedores = [];
 let cfgUnidades    = [];
+let cfgResurtido   = [];   // proveedores elegidos para la tabla de valor de inventario
 let cfgImpresion   = null;
 let ofertasHoy     = [];  // ofertas activas para hoy
 
@@ -42,6 +43,7 @@ function mapDoc(doc) {
     price:     doc.pVenta    ?? 0,
     retail:    doc.pCosto    ?? 0,
     stock:     doc.stock     ?? 0,
+    stockMax:  doc.stockMaximo ?? null,
     tags,
     proveedor: doc.proveedor || '',
     unidad:    doc.unidad   || '',
@@ -72,6 +74,7 @@ async function fetchConfig() {
   cfgCategorias  = data.categorias  ?? [];
   cfgProveedores = data.proveedores ?? [];
   cfgUnidades    = data.unidades    ?? [];
+  cfgResurtido   = data.resurtido   ?? [];
   cfgImpresion   = data.impresion   ?? null;
 }
 
@@ -657,12 +660,27 @@ function filterInventory() {
   renderInventoryTable(filtered);
 }
 
+async function updateStockMaximo(id, val) {
+  const n = val.trim() === '' ? null : Math.max(0, parseInt(val) || 0);
+  try {
+    await apiFetch(`/productos/${id}/stock-maximo`, {
+      method: 'PATCH',
+      body:   JSON.stringify({ stockMaximo: n }),
+    });
+    const prod = window._invAll?.find(p => p._id === id);
+    if (prod) prod.stockMax = n;   // conservar el valor si se re-filtra la tabla
+    toast('✓ Stock máximo actualizado');
+  } catch (err) {
+    toast(`❌ ${err.message}`);
+  }
+}
+
 function renderInventoryTable(list) {
   const max = list.length ? Math.max(...list.map(p => p.stock)) : 1;
 
   if (!list.length) {
     document.getElementById('i-body').innerHTML =
-      '<tr><td colspan="10" class="empty">Sin resultados</td></tr>';
+      '<tr><td colspan="11" class="empty">Sin resultados</td></tr>';
     return;
   }
 
@@ -722,6 +740,13 @@ function renderInventoryTable(list) {
             <span class="stock-num" style="color:${sc};">${p.stock}</span>
           </div>
         </td>
+        <td style="text-align:center;">
+          <input type="number" min="0" value="${p.stockMax ?? ''}" placeholder="—"
+            onchange="updateStockMaximo('${p._id}', this.value)"
+            title="Stock máximo (editable)"
+            style="width:62px;padding:5px 7px;border:1.5px solid var(--border);border-radius:6px;
+            background:var(--card);color:var(--text);text-align:right;font-size:13px;">
+        </td>
         <td style="display:flex;align-items:center;gap:8px;">
           <span style="background:${sb};color:${sc};
             padding:3px 9px;border-radius:6px;font-size:12px;font-weight:600;">${sl}</span>
@@ -752,7 +777,7 @@ function descargarInventario() {
   const lista = [...(window._invAll ?? [])].sort((a, b) => a.stock - b.stock);
   if (!lista.length) { toast('⚠️ Sin productos para descargar'); return; }
 
-  const encabezado = ['Producto', 'SKU', 'Tags', 'Proveedor', 'Unidad', 'Precio Costo', 'Precio Venta', 'Stock', 'Estado'];
+  const encabezado = ['Producto', 'SKU', 'Tags', 'Proveedor', 'Unidad', 'Precio Costo', 'Precio Venta', 'Stock', 'Stock Máx', 'Estado'];
   const filas = lista.map(p => [
     p.name,
     p.sku   || '',
@@ -762,6 +787,7 @@ function descargarInventario() {
     p.retail != null ? p.retail : '',
     p.price  != null ? p.price  : '',
     p.stock,
+    p.stockMax != null ? p.stockMax : '',
     stockLabel(p.stock),
   ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
 
@@ -1576,7 +1602,51 @@ async function loadConfig() {
   renderCfgList('categorias');
   renderCfgList('proveedores');
   renderCfgList('unidades');
+  renderResurtido();
   loadPrintConfig();
+}
+
+function renderResurtido() {
+  const listEl  = document.getElementById('cfg-resurtido-list');
+  const countEl = document.getElementById('cfg-resurtido-count');
+  if (!listEl) return;
+
+  // Solo proveedores que aún existen
+  cfgResurtido = cfgResurtido.filter(p => cfgProveedores.includes(p));
+  countEl.textContent = cfgResurtido.length;
+
+  if (!cfgProveedores.length) {
+    listEl.innerHTML = `<div class="config-empty">Primero agrega proveedores</div>`;
+    return;
+  }
+
+  listEl.innerHTML = cfgProveedores.map(prov => {
+    const checked = cfgResurtido.includes(prov) ? 'checked' : '';
+    const provEsc = prov.replace(/'/g, '&#39;');
+    return `
+      <label class="config-item" style="cursor:pointer;">
+        <span>${prov}</span>
+        <input type="checkbox" ${checked} onchange="toggleResurtido('${provEsc}')"
+               style="width:18px;height:18px;cursor:pointer;accent-color:var(--primary);">
+      </label>`;
+  }).join('');
+}
+
+async function toggleResurtido(prov) {
+  const i = cfgResurtido.indexOf(prov);
+  if (i >= 0) cfgResurtido.splice(i, 1);
+  else        cfgResurtido.push(prov);
+  try {
+    const res = await fetch(`${API}/config/resurtido`, {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ valores: cfgResurtido }),
+    });
+    if (!res.ok) throw new Error();
+    renderResurtido();
+  } catch {
+    toast('❌ Error al guardar');
+  }
 }
 
 function loadPrintConfig() {
@@ -1675,6 +1745,7 @@ async function cfgAdd(tipo) {
   await cfgSave(tipo);
   input.value = '';
   renderCfgList(tipo);
+  if (tipo === 'proveedores') renderResurtido();
 }
 
 async function cfgRemove(tipo, idx) {
@@ -1682,6 +1753,7 @@ async function cfgRemove(tipo, idx) {
   lista.splice(idx, 1);
   await cfgSave(tipo);
   renderCfgList(tipo);
+  if (tipo === 'proveedores') renderResurtido();
 }
 
 async function cfgSave(tipo) {
@@ -2657,6 +2729,7 @@ let _chartStock = null;
 let _rotOffset  = 0;      // 0 = semana actual, -1 = anterior…
 let _rotData    = null;   // { semana, productos } de la respuesta del backend
 let _estData    = null;   // { productos } de productos estancados
+let _valprovData = null;  // { proveedores } valor de inventario por proveedor
 
 async function loadDashboard() {
   try {
@@ -2672,6 +2745,7 @@ async function loadDashboard() {
     renderStockBajo(prods);
     renderCalendario(data.mes);
     loadRotacion();
+    loadValorProveedores();
     loadEstancados();
   } catch (err) {
     toast(`❌ Error cargando dashboard: ${err.message}`);
@@ -2684,6 +2758,7 @@ async function loadRotacion() {
     const s = _rotData.semana;
     document.getElementById('d-rot-rango').textContent = rangoSemanaTexto(s.inicio, s.fin);
     document.getElementById('d-rot-next').disabled = s.esActual;
+    poblarProvRotacion();
     renderRotacion();
   } catch (err) {
     toast(`❌ Error cargando rotación: ${err.message}`);
@@ -2703,22 +2778,45 @@ function rangoSemanaTexto(inicioISO, finISO) {
   return `${a.getDate()} ${meses[a.getMonth()]} – ${b.getDate()} ${meses[b.getMonth()]} ${b.getFullYear()}`;
 }
 
+function poblarProvRotacion() {
+  const sel = document.getElementById('d-rot-prov');
+  if (!sel || !_rotData) return;
+  const actual = sel.value;
+  const provs = [...new Set(_rotData.productos.map(p => p.proveedor).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Todos los proveedores</option>' +
+    provs.map(p => `<option value="${p.replace(/"/g, '&quot;')}">${p}</option>`).join('');
+  if (provs.includes(actual)) sel.value = actual;   // conservar selección al cambiar de semana
+}
+
 function renderRotacion() {
   const body = document.getElementById('d-rot-body');
   if (!_rotData) return;
 
-  const q = document.getElementById('d-rot-buscar').value.trim().toLowerCase();
-  const lista = _rotData.productos.filter(p =>
-    !q || p.nombre.toLowerCase().includes(q) || (p.codigo || '').toLowerCase().includes(q));
+  const q     = document.getElementById('d-rot-buscar').value.trim().toLowerCase();
+  const prov  = document.getElementById('d-rot-prov').value;
+  const orden = document.getElementById('d-rot-orden').value;
+
+  let lista = _rotData.productos.filter(p => {
+    const matchQ    = !q || p.nombre.toLowerCase().includes(q) || (p.codigo || '').toLowerCase().includes(q);
+    const matchProv = !prov || p.proveedor === prov;
+    // Sin proveedor: solo los que se vendieron esta o la semana pasada.
+    // Con proveedor: todos sus productos (aunque no vendieran) → así el Total cuadra con Valor por proveedor.
+    const scope = prov ? true : (p.unidades > 0 || p.unidadesPrev > 0);
+    return matchQ && matchProv && scope;
+  });
+
+  // Orden: por unidades de esta semana (default) o por la semana anterior, ambos de mayor a menor
+  lista = [...lista].sort((a, b) =>
+    orden === 'prev' ? b.unidadesPrev - a.unidadesPrev : b.unidades - a.unidades);
 
   if (!lista.length) {
-    body.innerHTML = '<tr><td colspan="6" class="empty">Sin ventas esta semana</td></tr>';
+    body.innerHTML = '<tr><td colspan="10" class="empty">Sin ventas esta semana</td></tr>';
     return;
   }
 
   const num = n => Number.isInteger(n) ? n : n.toFixed(2);
 
-  body.innerHTML = lista.map(p => {
+  const filas = lista.map(p => {
     const u = p.unidad ? ` ${p.unidad}` : '';
     // Comparación vs semana anterior
     const diff = p.unidades - p.unidadesPrev;
@@ -2731,16 +2829,50 @@ function renderRotacion() {
     const stockTxt = p.stock == null
       ? '<span style="color:var(--muted);">—</span>'
       : `<span style="color:${stockColor(p.stock)};font-weight:600;">${p.stock}</span>`;
+    // Stock máximo (solo visualización)
+    const maxTxt    = p.stockMax == null ? '<span style="color:var(--muted);">—</span>' : p.stockMax;
+    const compraTxt = p.pCosto  == null ? '<span style="color:var(--muted);">—</span>' : fmt(p.pCosto);
+    const ventaTxt  = p.pVenta  == null ? '<span style="color:var(--muted);">—</span>' : fmt(p.pVenta);
+    // Total de compra = precio de compra × stock
+    const totCompraTxt = p.pCosto == null
+      ? '<span style="color:var(--muted);">—</span>'
+      : fmt(p.pCosto * (p.stock || 0));
     return `
       <tr>
         <td>${p.nombre}${p.codigo ? ` <span style="color:var(--muted);font-size:12px;">${p.codigo}</span>` : ''}</td>
         <td style="text-align:right;font-weight:700;">${num(p.unidades)}${u}</td>
         <td style="text-align:right;">${prevTxt}</td>
         <td style="text-align:right;">${stockTxt}</td>
+        <td style="text-align:right;">${maxTxt}</td>
+        <td style="text-align:right;">${compraTxt}</td>
+        <td style="text-align:right;">${ventaTxt}</td>
+        <td style="text-align:right;">${totCompraTxt}</td>
         <td style="text-align:right;">${fmt(p.ingreso)}</td>
         <td>${p.proveedor || '<span style="color:var(--muted);">—</span>'}</td>
       </tr>`;
   }).join('');
+
+  // Fila Total (solo al filtrar por un proveedor)
+  let totalRow = '';
+  if (prov) {
+    const suma = k => lista.reduce((s, p) => s + (p[k] || 0), 0);
+    const totCompra = lista.reduce((s, p) => s + ((p.pCosto || 0) * (p.stock || 0)), 0);
+    totalRow = `
+      <tr style="border-top:2px solid var(--border);font-weight:700;">
+        <td>Total (${lista.length})</td>
+        <td style="text-align:right;">${num(suma('unidades'))}</td>
+        <td style="text-align:right;">${num(suma('unidadesPrev'))}</td>
+        <td style="text-align:right;">${num(suma('stock'))}</td>
+        <td style="text-align:right;">${num(suma('stockMax'))}</td>
+        <td style="text-align:right;">${fmt(suma('pCosto'))}</td>
+        <td style="text-align:right;">${fmt(suma('pVenta'))}</td>
+        <td style="text-align:right;">${fmt(totCompra)}</td>
+        <td style="text-align:right;">${fmt(suma('ingreso'))}</td>
+        <td></td>
+      </tr>`;
+  }
+
+  body.innerHTML = filas + totalRow;
 }
 
 async function loadEstancados() {
@@ -2813,6 +2945,55 @@ async function eliminarProductoEst(id, nombre) {
   } catch (err) {
     toast(`❌ ${err.message}`);
   }
+}
+
+async function loadValorProveedores() {
+  try {
+    _valprovData = await apiFetch('/dashboard/valor-proveedores');
+    renderValorProveedores();
+  } catch (err) {
+    toast(`❌ Error cargando valor por proveedor: ${err.message}`);
+  }
+}
+
+function renderValorProveedores() {
+  const body = document.getElementById('d-valprov-body');
+  if (!_valprovData) return;
+
+  const lista = _valprovData.proveedores;
+  if (!lista.length) {
+    body.innerHTML = '<tr><td colspan="5" class="empty">Selecciona proveedores en Configuración → "Proveedores a resurtir"</td></tr>';
+    return;
+  }
+
+  const totVal = lista.reduce((s, p) => s + p.valor, 0);
+  const totMax = lista.reduce((s, p) => s + p.stockMaximo, 0);
+  const totCom = lista.reduce((s, p) => s + p.comprar, 0);
+
+  const filas = lista.map(p => {
+    const comprarTxt = p.comprar > 0
+      ? `<span style="color:var(--warning);font-weight:700;">${fmt(p.comprar)}</span>`
+      : `<span style="color:var(--success);">${fmt(0)}</span>`;
+    return `
+    <tr>
+      <td>${p.proveedor}</td>
+      <td style="text-align:right;">${p.productos}</td>
+      <td style="text-align:right;font-weight:600;">${fmt(p.valor)}</td>
+      <td style="text-align:right;">${fmt(p.stockMaximo)}</td>
+      <td style="text-align:right;">${comprarTxt}</td>
+    </tr>`;
+  }).join('');
+
+  const filaTotal = `
+    <tr style="border-top:2px solid var(--border);">
+      <td style="font-weight:700;">Total</td>
+      <td></td>
+      <td style="text-align:right;font-weight:700;color:var(--primary);">${fmt(totVal)}</td>
+      <td style="text-align:right;font-weight:700;">${fmt(totMax)}</td>
+      <td style="text-align:right;font-weight:700;color:var(--warning);">${fmt(totCom)}</td>
+    </tr>`;
+
+  body.innerHTML = filas + filaTotal;
 }
 
 function renderDashCards(hoy) {

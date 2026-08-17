@@ -63,10 +63,20 @@ function buildProductDoc({ codigo, producto, pCosto, pVenta, stock, tags, catego
   };
 }
 
-// Calcula ganancia de una venta
-const calcGanancia = venta =>
-  venta.productos.reduce((s, p) =>
+// Costo de aceptar tarjeta: 3.5% de comisión + 16% de IVA sobre esa comisión ≈ 4.06% del total
+const COMISION_TARJETA = 0.035;
+const IVA_COMISION     = 0.16;
+
+// Calcula ganancia de una venta. Si el pago fue con tarjeta, descuenta la comisión,
+// pero sin dejar la ganancia en negativo (p.ej. productos sin costo registrado → mínimo $0).
+const calcGanancia = venta => {
+  const bruta = venta.productos.reduce((s, p) =>
     (p.pCosto != null && p.pCosto > 0) ? s + (p.pVenta - p.pCosto) * p.cantidad : s, 0);
+  if (venta.metodoPago === 'tarjeta') {
+    return Math.max(0, bruta - venta.total * COMISION_TARJETA * (1 + IVA_COMISION));
+  }
+  return bruta;
+};
 
 // ── Auth ─────────────────────────────────────────────────────────
 const sessions = new Map(); // token → { username, tipo, _id }
@@ -169,6 +179,20 @@ app.put('/api/productos/:id', wrap(async (req, res) => {
   res.json({ _id: req.params.id, ...update });
 }));
 
+// Edición puntual del stock máximo (editable desde la tabla de inventario)
+app.patch('/api/productos/:id/stock-maximo', wrap(async (req, res) => {
+  let { stockMaximo } = req.body;
+  stockMaximo = (stockMaximo == null || stockMaximo === '')
+    ? null
+    : Math.max(0, parseInt(stockMaximo) || 0);
+  const result = await db.collection('productos').updateOne(
+    { _id: ObjectId.createFromHexString(req.params.id) },
+    { $set: { stockMaximo, actualizadoEn: new Date() } }   // actualizadoEn → el sync lo sube a Atlas
+  );
+  if (result.matchedCount === 0) return res.status(404).json({ error: 'Producto no encontrado' });
+  res.json({ ok: true, stockMaximo });
+}));
+
 app.delete('/api/productos/:id', wrap(async (req, res) => {
   const oid = ObjectId.createFromHexString(req.params.id);
 
@@ -228,7 +252,7 @@ app.get('/api/categorias', wrap(async (_req, res) => {
 // ── Config ───────────────────────────────────────────────────────
 app.get('/api/config', wrap(async (_req, res) => {
   const docs = await db.collection('config').find({}).toArray();
-  const cfg  = { categorias: [], proveedores: [], unidades: [], impresion: null };
+  const cfg  = { categorias: [], proveedores: [], unidades: [], resurtido: [], impresion: null };
   for (const d of docs) {
     if (d.tipo === 'impresion') cfg.impresion = d.tickets ?? null;
     else if (d.tipo in cfg)    cfg[d.tipo]   = d.valores ?? [];
@@ -301,7 +325,7 @@ app.post('/api/print/ticket', wrap(async (req, res) => {
 
 app.put('/api/config/:tipo', wrap(async (req, res) => {
   const { tipo } = req.params;
-  if (!['categorias', 'proveedores', 'unidades'].includes(tipo))
+  if (!['categorias', 'proveedores', 'unidades', 'resurtido'].includes(tipo))
     return res.status(400).json({ error: 'Tipo inválido' });
   const valores = (req.body.valores ?? []).map(v => String(v).trim()).filter(Boolean);
   await db.collection('config').updateOne({ tipo }, { $set: { tipo, valores, updatedAt: new Date() } }, { upsert: true });
@@ -628,20 +652,17 @@ app.get('/api/dashboard/rotacion', wrap(async (req, res) => {
   // Semana anterior (para comparar)
   const inicioSemanaPrev = new Date(inicioSemana); inicioSemanaPrev.setDate(inicioSemana.getDate() - 7);
 
-  // Traer ventas de ambas semanas de una sola vez, y el stock/proveedor actual
+  // Traer ventas de ambas semanas y TODOS los productos (para poder incluir también los que no vendieron)
   const [ventas, productos] = await Promise.all([
     db.collection('ventas')
       .find({ fecha: { $gte: inicioSemanaPrev, $lte: finSemana }, cancelada: { $ne: true } })
       .toArray(),
-    db.collection('productos').find({}, { projection: { codigo: 1, stock: 1, proveedor: 1 } }).toArray(),
+    db.collection('productos')
+      .find({}, { projection: { codigo: 1, producto: 1, unidad: 1, stock: 1, stockMaximo: 1, pCosto: 1, pVenta: 1, proveedor: 1 } })
+      .toArray(),
   ]);
 
-  const infoProd = new Map();
-  for (const p of productos) {
-    if (p.codigo) infoProd.set(p.codigo, { stock: p.stock ?? null, proveedor: p.proveedor || '' });
-  }
-
-  // Acumular por clave (código si existe, si no el nombre)
+  // Acumular ventas por clave (código si existe, si no el nombre)
   const acc = new Map();
   for (const v of ventas) {
     const esActual = new Date(v.fecha) >= inicioSemana;
@@ -659,22 +680,42 @@ app.get('/api/dashboard/rotacion', wrap(async (req, res) => {
     }
   }
 
-  const lista = [...acc.values()]
-    .filter(r => r.unidades > 0 || r.unidadesPrev > 0)
-    .map(r => {
-      const info = r.codigo ? infoProd.get(r.codigo) : null;
-      return {
-        codigo:       r.codigo,
-        nombre:       r.nombre,
-        unidad:       r.unidad,
-        unidades:     round2(r.unidades),
-        unidadesPrev: round2(r.unidadesPrev),
-        ingreso:      round2(r.ingreso),
-        stock:        info ? info.stock : null,
-        proveedor:    info ? info.proveedor : '',
-      };
-    })
-    .sort((a, b) => b.unidades - a.unidades);
+  // Base: TODOS los productos, con sus ventas de la semana mezcladas (0 si no vendieron)
+  const usados = new Set();
+  const lista = productos.map(prod => {
+    const clave = prod.codigo || prod.producto;
+    const s = acc.get(clave);
+    if (s) usados.add(clave);
+    return {
+      codigo:       prod.codigo || '',
+      nombre:       prod.producto,
+      unidad:       prod.unidad || (s ? s.unidad : ''),
+      unidades:     round2(s ? s.unidades : 0),
+      unidadesPrev: round2(s ? s.unidadesPrev : 0),
+      ingreso:      round2(s ? s.ingreso : 0),
+      stock:        prod.stock ?? null,
+      stockMax:     prod.stockMaximo ?? null,
+      pCosto:       prod.pCosto ?? null,
+      pVenta:       prod.pVenta ?? null,
+      proveedor:    prod.proveedor || '',
+    };
+  });
+
+  // Ventas de productos que ya no existen en el catálogo (huérfanas): incluirlas igual
+  for (const [clave, s] of acc) {
+    if (usados.has(clave)) continue;
+    lista.push({
+      codigo:       s.codigo || '',
+      nombre:       s.nombre,
+      unidad:       s.unidad,
+      unidades:     round2(s.unidades),
+      unidadesPrev: round2(s.unidadesPrev),
+      ingreso:      round2(s.ingreso),
+      stock: null, stockMax: null, pCosto: null, pVenta: null, proveedor: '',
+    });
+  }
+
+  lista.sort((a, b) => b.unidades - a.unidades);
 
   res.json({
     semana: {
@@ -739,6 +780,46 @@ app.get('/api/dashboard/estancados', wrap(async (_req, res) => {
   });
 
   res.json({ productos: lista });
+}));
+
+// Valor del inventario (a precio de COSTO) por proveedor seleccionado para resurtido.
+// Sirve para proveedores que solo piden "cuánto dinero en producto quieres".
+app.get('/api/dashboard/valor-proveedores', wrap(async (_req, res) => {
+  const [cfgSel, cfgMontos] = await Promise.all([
+    db.collection('config').findOne({ tipo: 'resurtido' }),
+    db.collection('config').findOne({ tipo: 'resurtido_montos' }),
+  ]);
+  const seleccionados = cfgSel?.valores ?? [];
+  if (!seleccionados.length) return res.json({ proveedores: [] });
+
+  // Objetivo (stock máximo en dinero) guardado por proveedor
+  const objetivos = new Map((cfgMontos?.valores ?? []).map(m => [m.proveedor, m.stockMaximo]));
+
+  const productos = await db.collection('productos')
+    .find({ proveedor: { $in: seleccionados } },
+          { projection: { proveedor: 1, stock: 1, pCosto: 1 } })
+    .toArray();
+
+  const acc = new Map(seleccionados.map(p => [p, { proveedor: p, valor: 0, productos: 0 }]));
+  for (const p of productos) {
+    const r = acc.get(p.proveedor);
+    if (!r) continue;
+    const stock  = p.stock ?? 0;
+    const costo  = (p.pCosto != null && p.pCosto > 0) ? p.pCosto : 0;
+    if (stock > 0) r.productos += 1;
+    r.valor += stock * costo;
+  }
+
+  const lista = [...acc.values()]
+    .map(r => {
+      const valor       = round2(r.valor);
+      const stockMaximo = round2(objetivos.get(r.proveedor) ?? 0);   // objetivo a costo
+      const comprar     = round2(Math.max(0, stockMaximo - valor));  // para cubrir la semana
+      return { proveedor: r.proveedor, productos: r.productos, valor, stockMaximo, comprar };
+    })
+    .sort((a, b) => b.valor - a.valor);
+
+  res.json({ proveedores: lista });
 }));
 
 // ── Inventariado ─────────────────────────────────────────────────
